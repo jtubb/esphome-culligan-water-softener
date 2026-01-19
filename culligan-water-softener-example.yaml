@@ -297,54 +297,43 @@ switch:
       id: display_switch
 
 # Numbers (adjustable settings)
+# Note: Values display as floats (32.0) - this is controlled by Home Assistant UI
 number:
   - platform: culligan_water_softener
     culligan_water_softener_id: water_softener
     water_hardness:
       name: "${friendly_name} Set Water Hardness"
       id: set_hardness
-      accuracy_decimals: 0
     regeneration_time_hour:
       name: "${friendly_name} Set Regen Hour"
       id: set_regen_hour
-      accuracy_decimals: 0
     reserve_capacity:
       name: "${friendly_name} Set Reserve Capacity"
       id: set_reserve
-      accuracy_decimals: 0
     salt_level:
       name: "${friendly_name} Set Salt Level"
       id: set_salt_level
-      accuracy_decimals: 0
     regen_days:
       name: "${friendly_name} Set Regen Days"
       id: set_regen_days
-      accuracy_decimals: 0
     resin_capacity:
       name: "${friendly_name} Set Resin Capacity"
       id: set_resin_capacity
-      accuracy_decimals: 0
     prefill_duration:
       name: "${friendly_name} Set Prefill Duration"
       id: set_prefill_duration
-      accuracy_decimals: 0
     backwash_time:
       name: "${friendly_name} Set Backwash Time"
       id: set_backwash_time
-      accuracy_decimals: 0
     brine_draw_time:
       name: "${friendly_name} Set Brine Draw Time"
       id: set_brine_draw_time
-      accuracy_decimals: 0
     rapid_rinse_time:
       name: "${friendly_name} Set Rapid Rinse Time"
       id: set_rapid_rinse_time
-      accuracy_decimals: 0
     brine_refill_time:
       name: "${friendly_name} Set Brine Refill Time"
       id: set_brine_refill_time
-      accuracy_decimals: 0
     low_salt_alert:
       name: "${friendly_name} Set Low Salt Alert"
       id: set_low_salt_alert
-      accuracy_decimals: 0
