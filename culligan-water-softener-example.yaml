@@ -1,76 +1,123 @@
-# Example ESPHome configuration for Culligan Water Softener BLE Integration
+# ESPHome Culligan Water Softener BLE Client
+# Uses custom component for Culligan CS Meter Soft water softeners
 #
-# Replace 'esphome-btproxy-466108' with your ESP32 device name
-# Replace the MAC address with your water softener's address
+# Device: ESP32-S3 DevKitC-1
 
 substitutions:
-  device_name: esphome-btproxy-466108
-  friendly_name: "ESPHome BT Proxy"
-  water_softener_mac: "E8:3B:AA:91:CD:68"  # Your CS_Meter_Soft MAC address
+  device_name: watersoftener-ble
+  friendly_name: "Water Softener"
+  # Water Softener MAC Address
+  water_softener_mac: "E8:3B:AA:91:CD:68"
 
 esphome:
   name: ${device_name}
-  platform: ESP32
-  board: esp32dev
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: -100
+    then:
+      - logger.log: "Water Softener BLE Client Starting..."
+  platformio_options:
+    board_build.mcu: esp32s3
+    board_build.variant: esp32s3
+    board_build.flash_mode: dio
 
-# Enable logging
+esp32:
+  board: seeed_xiao_esp32s3
+  variant: ESP32S3
+  framework:
+    type: esp-idf
+    version: recommended
+    sdkconfig_options:
+      # Enable Bluetooth with Bluedroid stack
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_BLUEDROID_ENABLED: y
+      CONFIG_BT_BLE_ENABLED: y
+      CONFIG_BTDM_CTRL_MODE_BLE_ONLY: y
+      CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY: n
+      CONFIG_BTDM_CTRL_MODE_BTDM: n
+      # GATT client support
+      CONFIG_BT_GATTC_ENABLE: y
+      # Connection parameters
+      CONFIG_BT_ACL_CONNECTIONS: "3"
+      CONFIG_BT_BLE_50_FEATURES_SUPPORTED: y
+
+# Enable logging (reduce for production)
 logger:
-  level: DEBUG
+  level: INFO
   logs:
-    culligan_water_softener: DEBUG
+    culligan_water_softener: INFO
+    esp32_ble_tracker: WARN
+    esp32_ble_client: WARN
 
 # Enable Home Assistant API
 api:
   encryption:
-    key: !secret api_encryption_key
+    key: !secret ha_api_key
 
 ota:
-  password: !secret ota_password
+  - platform: esphome
+    password: !secret ota_password
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-
-  # Enable fallback hotspot in case wifi connection fails
+  fast_connect: false
+  power_save_mode: none
+  manual_ip:
+    static_ip: 192.168.1.177
+    gateway: 192.168.1.254
+    subnet: 255.255.255.0
+    dns1: 192.168.50.1
   ap:
     ssid: "${device_name} Fallback"
     password: !secret fallback_password
 
-# Enable Bluetooth proxy (keep existing functionality)
-bluetooth_proxy:
-  active: true
-  cache_services: true
+time:
+  - platform: homeassistant
+    id: homeassistant_time
 
-# BLE client for water softener
+# Add safe_mode for OTA recovery
+safe_mode:
+  num_attempts: 3
+
+# BLE Tracker for scanning
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1100ms
+    window: 110ms
+    active: true
+
+# BLE Client for Water Softener
 ble_client:
   - mac_address: ${water_softener_mac}
     id: culligan_ble_client
+    on_connect:
+      then:
+        - logger.log: "Connected to Water Softener!"
+    on_disconnect:
+      then:
+        - logger.log: "Disconnected from Water Softener"
 
-# External component - use local path for development or GitHub for production
+# External component - local path
 external_components:
-  # For local development:
   - source:
-      type: local
-      path: components
+      type: git
+      url: https://github.com/jtubb/esphome-culligan-water-softener
+      ref: main
     components: [ culligan_water_softener ]
-
-  # For GitHub deployment (uncomment when ready):
-  # - source:
-  #     type: git
-  #     url: https://github.com/YOUR_USERNAME/esphome-culligan-water-softener
-  #   components: [ culligan_water_softener ]
 
 # Water softener component
 culligan_water_softener:
   id: water_softener
   ble_client_id: culligan_ble_client
-  password: 1234  # Default password, change if different
-  poll_interval: 60s  # How often to request data from device
+  password: 1234  # Default password
+  poll_interval: 60s
 
 # Sensors
 sensor:
   - platform: culligan_water_softener
     culligan_water_softener_id: water_softener
+    # Real-time sensors
     current_flow:
       name: "${friendly_name} Current Flow"
       id: current_flow
@@ -95,15 +142,23 @@ sensor:
     days_until_regen:
       name: "${friendly_name} Days Until Regeneration"
       id: days_until_regen
+    battery_level:
+      name: "${friendly_name} Battery"
+      id: battery_level
+    # Lifetime totals
     total_gallons:
       name: "${friendly_name} Total Gallons Treated"
       id: total_gallons
     total_regenerations:
       name: "${friendly_name} Total Regenerations"
       id: total_regenerations
-    battery_level:
-      name: "${friendly_name} Battery"
-      id: battery_level
+    # Resettable counters
+    total_gallons_resettable:
+      name: "${friendly_name} Total Gallons (Resettable)"
+      id: total_gallons_resettable
+    total_regenerations_resettable:
+      name: "${friendly_name} Total Regens (Resettable)"
+      id: total_regens_resettable
     # Settings sensors
     reserve_capacity:
       name: "${friendly_name} Reserve Capacity"
@@ -111,7 +166,30 @@ sensor:
     resin_capacity:
       name: "${friendly_name} Resin Capacity"
       id: resin_capacity
-    # Cycle time sensors (optional)
+    regen_day_override:
+      name: "${friendly_name} Regen Day Override"
+      id: regen_day_override
+    # Brine tank sensors
+    brine_tank_capacity:
+      name: "${friendly_name} Brine Tank Capacity"
+      id: brine_tank_capacity
+    brine_salt_percent:
+      name: "${friendly_name} Salt Level Percent"
+      id: brine_salt_percent
+    low_salt_alert:
+      name: "${friendly_name} Low Salt Alert Threshold"
+      id: low_salt_alert
+    # Filter/air sensors
+    filter_backwash_days:
+      name: "${friendly_name} Filter Backwash Days"
+      id: filter_backwash_days
+    air_recharge_days:
+      name: "${friendly_name} Air Recharge Days"
+      id: air_recharge_days
+    air_recharge_frequency:
+      name: "${friendly_name} Air Recharge Frequency"
+      id: air_recharge_frequency
+    # Cycle time sensors (positions 1-4)
     backwash_time:
       name: "${friendly_name} Backwash Time"
       id: backwash_time
@@ -124,6 +202,24 @@ sensor:
     brine_refill_time:
       name: "${friendly_name} Brine Refill Time"
       id: brine_refill_time
+    # Cycle positions 5-8
+    cycle_position_5:
+      name: "${friendly_name} Cycle Position 5"
+      id: cycle_pos_5
+    cycle_position_6:
+      name: "${friendly_name} Cycle Position 6"
+      id: cycle_pos_6
+    cycle_position_7:
+      name: "${friendly_name} Cycle Position 7"
+      id: cycle_pos_7
+    cycle_position_8:
+      name: "${friendly_name} Cycle Position 8"
+      id: cycle_pos_8
+
+  # WiFi signal sensor
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi Signal"
+    update_interval: 60s
 
 # Text sensors
 text_sensor:
@@ -155,6 +251,18 @@ binary_sensor:
     regeneration_active:
       name: "${friendly_name} Regenerating"
       id: regen_active
+    rental_regen_disabled:
+      name: "${friendly_name} Rental Regen Disabled"
+      id: rental_regen_disabled
+    rental_unit:
+      name: "${friendly_name} Rental Unit"
+      id: rental_unit
+    prefill_enabled:
+      name: "${friendly_name} Pre-fill Enabled"
+      id: prefill_enabled
+    prefill_soak_mode:
+      name: "${friendly_name} Pre-fill Soak Mode"
+      id: prefill_soak_mode
 
 # Buttons (commands)
 button:
@@ -175,6 +283,10 @@ button:
     reset_regenerations:
       name: "${friendly_name} Reset Regenerations Counter"
       id: reset_regens_btn
+
+  # Restart button
+  - platform: restart
+    name: "${friendly_name} Restart"
 
 # Switches (toggles)
 switch:
@@ -200,8 +312,3 @@ number:
     salt_level:
       name: "${friendly_name} Set Salt Level"
       id: set_salt_level
-
-# WiFi signal sensor (useful for monitoring)
-  - platform: wifi_signal
-    name: "${friendly_name} WiFi Signal"
-    update_interval: 60s

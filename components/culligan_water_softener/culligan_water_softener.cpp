@@ -44,10 +44,45 @@ void CulliganWaterSoftener::loop() {
     this->send_keepalive();
   }
 
+  // Non-blocking request state machine (20ms between commands)
+  if (this->request_state_ != REQ_IDLE && this->request_state_ != REQ_DONE) {
+    if (now - this->request_time_ >= 20) {
+      this->request_time_ = now;
+      uint8_t cmd[20];
+
+      switch (this->request_state_) {
+        case REQ_STATUS:
+          memset(cmd, 0x75, 20);  // 'u'
+          this->write_command(cmd, 20);
+          this->request_state_ = REQ_SETTINGS;
+          break;
+        case REQ_SETTINGS:
+          memset(cmd, 0x76, 20);  // 'v'
+          this->write_command(cmd, 20);
+          this->request_state_ = REQ_STATS;
+          break;
+        case REQ_STATS:
+          memset(cmd, 0x77, 20);  // 'w'
+          this->write_command(cmd, 20);
+          this->request_state_ = REQ_DONE;
+          ESP_LOGD(TAG, "Data requests complete (u, v, w)");
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
   // Periodic data request (at poll_interval)
-  if (this->authenticated_ && (now - this->last_poll_time_ >= this->poll_interval_ms_)) {
+  if (this->authenticated_ && this->request_state_ == REQ_IDLE &&
+      (now - this->last_poll_time_ >= this->poll_interval_ms_)) {
     this->last_poll_time_ = now;
     this->request_data();
+  }
+
+  // Reset request state after done
+  if (this->request_state_ == REQ_DONE && (now - this->request_time_ >= 100)) {
+    this->request_state_ = REQ_IDLE;
   }
 }
 
@@ -87,10 +122,11 @@ void CulliganWaterSoftener::gattc_event_handler(esp_gattc_cb_event_t event, esp_
 
     case ESP_GATTC_DISCONNECT_EVT:
       ESP_LOGW(TAG, "Disconnected from water softener");
-      this->buffer_.clear();
+      this->buffer_clear();
       this->handshake_received_ = false;
       this->authenticated_ = false;
       this->status_packet_count_ = 0;
+      this->request_state_ = REQ_IDLE;
       break;
 
     case ESP_GATTC_SEARCH_CMPL_EVT: {
@@ -146,24 +182,29 @@ void CulliganWaterSoftener::gattc_event_handler(esp_gattc_cb_event_t event, esp_
   }
 }
 
-void CulliganWaterSoftener::handle_notification(const uint8_t *data, uint16_t length) {
-  // Only log non-keepalive packets at INFO level to reduce noise
-  // Keepalive packets (0x78 0x78) are logged at VERBOSE level
-  bool is_keepalive = (length >= 2 && data[0] == 0x78 && data[1] == 0x78);
-
-  if (!is_keepalive) {
-    char hex_str[61];
-    size_t log_len = (length > 20) ? 20 : length;
-    for (size_t i = 0; i < log_len; i++) {
-      snprintf(hex_str + i * 3, 4, "%02X ", data[i]);
+// Ring buffer append - optimized for BLE notification sizes
+void CulliganWaterSoftener::buffer_append(const uint8_t *data, size_t length) {
+  for (size_t i = 0; i < length; i++) {
+    this->buffer_[this->buffer_head_] = data[i];
+    this->buffer_head_ = (this->buffer_head_ + 1) & (BUFFER_SIZE - 1);
+    // Overflow check - if we catch up to tail, advance tail (drop old data)
+    if (this->buffer_head_ == this->buffer_tail_) {
+      this->buffer_tail_ = (this->buffer_tail_ + 1) & (BUFFER_SIZE - 1);
     }
-    ESP_LOGD(TAG, "RX (%d bytes): %s", length, hex_str);
   }
+}
 
-  // Add data to buffer
-  for (uint16_t i = 0; i < length; i++) {
-    this->buffer_.push_back(data[i]);
+void CulliganWaterSoftener::handle_notification(const uint8_t *data, uint16_t length) {
+  // Skip logging for keepalive packets (hot path optimization)
+  // Only log at VERBOSE level if explicitly enabled
+#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERBOSE
+  if (length < 2 || data[0] != 0x78 || data[1] != 0x78) {
+    ESP_LOGV(TAG, "RX %d bytes: %02X %02X...", length, data[0], length > 1 ? data[1] : 0);
   }
+#endif
+
+  // Fast append to ring buffer
+  this->buffer_append(data, length);
 
   // Try to parse complete packets from buffer
   this->process_buffer();
@@ -172,12 +213,13 @@ void CulliganWaterSoftener::handle_notification(const uint8_t *data, uint16_t le
 void CulliganWaterSoftener::process_buffer() {
   // Process ONE packet per call to avoid watchdog timeout
   // Note: Handshake packets are 18 bytes, data packets vary (19-20 bytes)
-  if (this->buffer_.size() < 18) {
+  size_t buf_len = this->buffer_size();
+  if (buf_len < 18) {
     return;  // Not enough data yet
   }
 
-  uint8_t type0 = this->buffer_[0];
-  uint8_t type1 = this->buffer_[1];
+  uint8_t type0 = this->buffer_peek(0);
+  uint8_t type1 = this->buffer_peek(1);
 
   if (type0 == 0x74 && type1 == 0x74) {  // "tt" - Handshake
     this->parse_handshake();
@@ -191,34 +233,66 @@ void CulliganWaterSoftener::process_buffer() {
     // Silently consume keepalive packets - they're just connection maintenance
     // xx-0 is 6 bytes: 78 78 00 00 10 00
     // xx-1 through xx-6 are 4 bytes: 78 78 0X 00
-    if (this->buffer_.size() < 4) {
+    if (buf_len < 4) {
       return;  // Wait for complete packet
     }
-    uint8_t packet_num = this->buffer_[2];
+    uint8_t packet_num = this->buffer_peek(2);
     size_t packet_len = (packet_num == 0) ? 6 : 4;
-    if (this->buffer_.size() < packet_len) {
+    if (buf_len < packet_len) {
       return;  // Wait for complete packet
     }
-    this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + packet_len);
+    this->buffer_consume(packet_len);
   } else {
-    // Unknown packet type - scan for next valid header instead of discarding one byte at a time
-    // This handles headerless continuation packets (uu-3,4,5) more efficiently
-    ESP_LOGD(TAG, "Unknown packet start: 0x%02X 0x%02X, scanning for next valid header", type0, type1);
+    // Check if this is a daily usage continuation packet (no header)
+    // These arrive after ww-1 and contain additional daily usage history
+    if (this->daily_usage_packet_count_ > 0 && this->daily_usage_packet_count_ < 4) {
+      // Expecting continuation packet - extract data from ring buffer
+      if (this->daily_usage_packet_count_ == 1 && buf_len >= 20) {
+        // Continuation 1: 20 bytes -> index 17-36
+        uint8_t temp[20];
+        for (size_t i = 0; i < 20; i++) temp[i] = this->buffer_peek(i);
+        this->parse_daily_usage_data(temp, 20, 17);
+        this->buffer_consume(20);
+        this->daily_usage_packet_count_ = 2;
+        return;
+      } else if (this->daily_usage_packet_count_ == 2 && buf_len >= 20) {
+        // Continuation 2: 20 bytes -> index 37-56
+        uint8_t temp[20];
+        for (size_t i = 0; i < 20; i++) temp[i] = this->buffer_peek(i);
+        this->parse_daily_usage_data(temp, 20, 37);
+        this->buffer_consume(20);
+        this->daily_usage_packet_count_ = 3;
+        return;
+      } else if (this->daily_usage_packet_count_ == 3 && buf_len >= 6) {
+        // Continuation 3: 5 bytes of data + end marker (0x38) -> index 57-61
+        uint8_t temp[6];
+        for (size_t i = 0; i < 6; i++) temp[i] = this->buffer_peek(i);
+        this->parse_daily_usage_data(temp, 5, 57);
+        this->buffer_consume(6);
+        this->daily_usage_packet_count_ = 4;
+        this->daily_usage_complete_ = true;
+        // Now calculate average
+        this->calculate_avg_daily_usage();
+        return;
+      }
+      // Not enough data yet for continuation
+      return;
+    }
 
-    // Look for next valid header in buffer
+    // Unknown packet type - scan for next valid header
+    // This handles headerless continuation packets (uu-3,4,5) more efficiently
     size_t scan_pos = 1;
     bool found = false;
-    while (scan_pos < this->buffer_.size() - 1) {
-      uint8_t b0 = this->buffer_[scan_pos];
-      uint8_t b1 = this->buffer_[scan_pos + 1];
+    while (scan_pos < buf_len - 1) {
+      uint8_t b0 = this->buffer_peek(scan_pos);
+      uint8_t b1 = this->buffer_peek(scan_pos + 1);
       if ((b0 == 0x74 && b1 == 0x74) ||  // tt
           (b0 == 0x75 && b1 == 0x75) ||  // uu
           (b0 == 0x76 && b1 == 0x76) ||  // vv
           (b0 == 0x77 && b1 == 0x77) ||  // ww
           (b0 == 0x78 && b1 == 0x78)) {  // xx
         // Found a valid header, skip to it
-        ESP_LOGD(TAG, "Found valid header at offset %d, discarding %d bytes", scan_pos, scan_pos);
-        this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + scan_pos);
+        this->buffer_consume(scan_pos);
         found = true;
         break;
       }
@@ -227,8 +301,7 @@ void CulliganWaterSoftener::process_buffer() {
 
     if (!found) {
       // No valid header found, clear buffer (likely headerless continuation data)
-      ESP_LOGD(TAG, "No valid header found, clearing %d bytes of headerless data", this->buffer_.size());
-      this->buffer_.clear();
+      this->buffer_clear();
     }
   }
 }
@@ -236,8 +309,7 @@ void CulliganWaterSoftener::process_buffer() {
 
 void CulliganWaterSoftener::parse_handshake() {
   // Handshake packets are 18 bytes (not 20 like data packets)
-  if (this->buffer_.size() < 18) {
-    ESP_LOGD(TAG, "Handshake packet incomplete, waiting for more data");
+  if (this->buffer_size() < 18) {
     return;
   }
 
@@ -247,10 +319,10 @@ void CulliganWaterSoftener::parse_handshake() {
   // Offset 7: Auth status (0x80 = auth required)
   // Offset 11: Connection counter
 
-  this->firmware_major_ = this->buffer_[5];
-  this->firmware_minor_ = this->buffer_[6];
-  uint8_t auth_flag = this->buffer_[7];
-  this->connection_counter_ = this->buffer_[11];
+  this->firmware_major_ = this->buffer_peek(5);
+  this->firmware_minor_ = this->buffer_peek(6);
+  uint8_t auth_flag = this->buffer_peek(7);
+  this->connection_counter_ = this->buffer_peek(11);
 
   // Authentication is required for firmware < 6.0, regardless of the flag byte
   // The flag byte (0x80) may not always be set correctly by the device
@@ -269,7 +341,7 @@ void CulliganWaterSoftener::parse_handshake() {
   this->handshake_received_ = true;
 
   // Remove the handshake packet from buffer (18 bytes)
-  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 18);
+  this->buffer_consume(18);
 
   // Only authenticate if we haven't already for this connection
   if (this->authenticated_) {
@@ -289,15 +361,15 @@ void CulliganWaterSoftener::parse_handshake() {
 }
 
 void CulliganWaterSoftener::parse_status_packet() {
-  if (this->buffer_.size() < 20) {
+  if (this->buffer_size() < 20) {
     ESP_LOGD(TAG, "Status packet incomplete, waiting for more data");
     return;
   }
 
   // Packet number (which status packet this is - 0-5)
-  uint8_t packet_num = this->buffer_[2];
+  uint8_t packet_num = this->buffer_peek(2);
 
-  ESP_LOGD(TAG, "Status packet #%d (end marker: 0x%02X)", packet_num, this->buffer_[19]);
+  ESP_LOGD(TAG, "Status packet #%d (end marker: 0x%02X)", packet_num, this->buffer_peek(19));
 
   if (packet_num == 0) {
     // uu-0: Real-time data (per PROTOCOL.md)
@@ -315,10 +387,10 @@ void CulliganWaterSoftener::parse_status_packet() {
     // Offset 18: Flags
     // Offset 19: End marker '9' (0x39)
 
-    uint8_t hour = this->buffer_[3];
-    uint8_t minute = this->buffer_[4];
-    uint8_t am_pm = this->buffer_[5];
-    uint8_t battery_raw = this->buffer_[6];
+    uint8_t hour = this->buffer_peek(3);
+    uint8_t minute = this->buffer_peek(4);
+    uint8_t am_pm = this->buffer_peek(5);
+    uint8_t battery_raw = this->buffer_peek(6);
 
     // Flow values use BIG-ENDIAN and ÷100 scaling
     uint16_t flow_raw = this->read_uint16_be(7);
@@ -330,10 +402,10 @@ void CulliganWaterSoftener::parse_status_packet() {
     uint16_t peak_flow_raw = this->read_uint16_be(13);
     float peak_flow = peak_flow_raw / 100.0f;
 
-    uint8_t hardness = this->buffer_[15];
-    uint8_t regen_hour = this->buffer_[16];
-    uint8_t regen_am_pm = this->buffer_[17];
-    uint8_t flags = this->buffer_[18];
+    uint8_t hardness = this->buffer_peek(15);
+    uint8_t regen_hour = this->buffer_peek(16);
+    uint8_t regen_am_pm = this->buffer_peek(17);
+    uint8_t flags = this->buffer_peek(18);
 
     // Get battery percentage using lookup table
     float battery_pct = this->get_battery_percent(battery_raw);
@@ -401,11 +473,22 @@ void CulliganWaterSoftener::parse_status_packet() {
     // Offset 17: Brine refill time (minutes)
     // Offset 19: End marker ':' (0x3A)
 
-    uint8_t regen_active = this->buffer_[8];
-    uint8_t regens_remaining = this->buffer_[13];
-    uint8_t tank_type = this->buffer_[15];
-    uint8_t fill_height = this->buffer_[16];
-    uint8_t refill_time = this->buffer_[17];
+    uint8_t filter_backwash_days = this->buffer_peek(3);
+    uint8_t air_recharge_days = this->buffer_peek(4);
+    uint8_t regen_active = this->buffer_peek(8);
+    uint8_t regens_remaining = this->buffer_peek(13);
+    uint8_t low_salt_alert = this->buffer_peek(14);
+    uint8_t tank_type = this->buffer_peek(15);
+    uint8_t fill_height = this->buffer_peek(16);
+    uint8_t refill_time = this->buffer_peek(17);
+
+    // Publish filter/air recharge days
+    if (this->filter_backwash_days_sensor_ != nullptr) {
+      this->filter_backwash_days_sensor_->publish_state(filter_backwash_days);
+    }
+    if (this->air_recharge_days_sensor_ != nullptr) {
+      this->air_recharge_days_sensor_->publish_state(air_recharge_days);
+    }
 
     // Update regen active state
     this->regen_active_ = (regen_active != 0);
@@ -420,73 +503,109 @@ void CulliganWaterSoftener::parse_status_packet() {
     this->brine_refill_time_ = refill_time;
     this->brine_tank_configured_ = (regens_remaining != 0xFF);
 
+    // Publish low salt alert threshold
+    if (this->low_salt_alert_sensor_ != nullptr) {
+      this->low_salt_alert_sensor_->publish_state(low_salt_alert);
+    }
+
     // Calculate and publish brine level if configured
     if (this->brine_tank_configured_) {
       float salt_remaining = this->calculate_salt_remaining();
+      float tank_multiplier = this->get_tank_multiplier(tank_type);
+      float tank_capacity = fill_height * tank_multiplier;
+      int salt_percent = (tank_capacity > 0) ? (int)((salt_remaining / tank_capacity) * 100) : 0;
+      if (salt_percent > 100) salt_percent = 100;
+
       if (this->brine_level_sensor_ != nullptr) {
         this->brine_level_sensor_->publish_state(salt_remaining);
+      }
+      if (this->brine_tank_capacity_sensor_ != nullptr) {
+        this->brine_tank_capacity_sensor_->publish_state(tank_capacity);
+      }
+      if (this->brine_salt_percent_sensor_ != nullptr) {
+        this->brine_salt_percent_sensor_->publish_state(salt_percent);
       }
       // Update salt level number entity with current value
       if (this->salt_level_number_ != nullptr) {
         this->salt_level_number_->publish_state(salt_remaining);
       }
-      ESP_LOGD(TAG, "Salt remaining: %.1f lbs (tank=%d\", height=%d\", refill=%d min, regens=%d)",
-               salt_remaining, tank_type, fill_height, refill_time, regens_remaining);
+      ESP_LOGD(TAG, "Salt remaining: %.1f lbs (%.0f%%), capacity: %.1f lbs (tank=%d\", height=%d\", refill=%d min, regens=%d)",
+               salt_remaining, (float)salt_percent, tank_capacity, tank_type, fill_height, refill_time, regens_remaining);
     } else {
       ESP_LOGD(TAG, "Brine tank not configured");
     }
 
-    ESP_LOGI(TAG, "Parsed uu-1: Regen active=%d, Salt=%.1f lbs",
-             regen_active, this->brine_tank_configured_ ? this->calculate_salt_remaining() : 0.0f);
+    ESP_LOGI(TAG, "Parsed uu-1: Regen active=%d, Salt=%.1f lbs, Filter backwash=%d days, Air recharge=%d days",
+             regen_active, this->brine_tank_configured_ ? this->calculate_salt_remaining() : 0.0f,
+             filter_backwash_days, air_recharge_days);
   } else if (packet_num >= 2) {
     // uu-2 through uu-5: Historical data packets
     // We don't need this data, and uu-3,4,5 arrive WITHOUT headers (continuation packets)
     // Clear the entire buffer after uu-2 to avoid buffer corruption from headerless packets
     ESP_LOGD(TAG, "Status packet #%d (historical), clearing buffer to skip headerless continuations", packet_num);
-    this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
-    this->buffer_.clear();  // Clear remaining buffer to skip uu-3,4,5 headerless data
+    this->buffer_consume(20);
+    this->buffer_clear();  // Clear remaining buffer to skip uu-3,4,5 headerless data
     this->status_packet_count_++;
     return;
   }
 
   // Remove the parsed packet from buffer (20 bytes)
-  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
+  this->buffer_consume(20);
   this->status_packet_count_++;
 }
 
 void CulliganWaterSoftener::parse_settings_packet() {
-  if (this->buffer_.size() < 20) {
+  if (this->buffer_size() < 20) {
     ESP_LOGD(TAG, "Settings packet incomplete");
     return;
   }
 
-  uint8_t packet_num = this->buffer_[2];
+  uint8_t packet_num = this->buffer_peek(2);
 
   ESP_LOGD(TAG, "Settings packet #%d", packet_num);
 
   if (packet_num == 0) {
-    // vv-0: Configuration (per PROTOCOL.md)
+    // vv-0: Configuration (per PROTOCOL.md and Python script)
     // Offset 3: Days until regen
-    // Offset 4: Regen day override
+    // Offset 4: Regen day override (days 0-29)
     // Offset 5: Reserve capacity %
-    // Offset 6-7: Resin grain capacity (BE, ×100)
-    // Offset 8: Pre-fill enabled
-    // Offset 9: Pre-fill duration (hours)
-    // Offset 10: Brine soak duration (hours)
+    // Offset 6-7: Resin grain capacity (BE, ×1000)
+    // Offset 8: Rental regen disabled (== 11 means disabled)
+    // Offset 9: Rental unit setting (!= 0 means rental)
+    // Offset 10: Air recharge frequency (days)
+    // Offset 11: Regen active flag
+    // Offset 12: Pre-fill enabled (!= 0)
+    // Offset 13: Brine soak duration (hours, 1-4)
+    // Offset 14: Pre-fill soak mode (& 0x08)
     // Offset 16: Flags
     // Offset 19: End marker 'B' (0x42)
 
-    uint8_t days_until_regen = this->buffer_[3];
-    uint8_t reserve_capacity = this->buffer_[5];
+    uint8_t days_until_regen = this->buffer_peek(3);
+    uint8_t regen_day_override = this->buffer_peek(4);
+    uint8_t reserve_capacity = this->buffer_peek(5);
     uint16_t resin_raw = this->read_uint16_be(6);
     uint32_t resin_capacity = resin_raw * 1000;  // Scale to grains (raw value is in thousands)
-    uint8_t prefill_enabled = this->buffer_[8];
-    uint8_t prefill_duration = this->buffer_[9];
-    uint8_t soak_duration = this->buffer_[10];
-    uint8_t flags = this->buffer_[16];
+    uint8_t rental_regen_byte = this->buffer_peek(8);
+    uint8_t rental_unit_byte = this->buffer_peek(9);
+    uint8_t air_recharge_frequency = this->buffer_peek(10);
+    uint8_t prefill_enabled_byte = this->buffer_peek(12);
+    uint8_t soak_duration = this->buffer_peek(13);
+    if (soak_duration < 1) soak_duration = 1;  // Min 1 hour
+    uint8_t prefill_soak_byte = this->buffer_peek(14);
+    uint8_t flags = this->buffer_peek(16);
+
+    // Parse rental settings
+    bool rental_regen_disabled = (rental_regen_byte == 11);
+    bool rental_unit = (rental_unit_byte != 0);
+    bool prefill_enabled = (prefill_enabled_byte != 0);
+    bool prefill_soak_mode = (prefill_soak_byte & 0x08) != 0;
 
     if (this->days_until_regen_sensor_ != nullptr) {
       this->days_until_regen_sensor_->publish_state(days_until_regen);
+    }
+
+    if (this->regen_day_override_sensor_ != nullptr) {
+      this->regen_day_override_sensor_->publish_state(regen_day_override);
     }
 
     if (this->reserve_capacity_sensor_ != nullptr) {
@@ -502,41 +621,75 @@ void CulliganWaterSoftener::parse_settings_packet() {
       this->resin_capacity_sensor_->publish_state(resin_capacity);
     }
 
+    if (this->air_recharge_frequency_sensor_ != nullptr) {
+      this->air_recharge_frequency_sensor_->publish_state(air_recharge_frequency);
+    }
+
+    // Publish prefill duration only if prefill is enabled
     if (this->prefill_duration_sensor_ != nullptr && prefill_enabled) {
-      this->prefill_duration_sensor_->publish_state(prefill_duration);
+      // Note: prefill_duration is at different offset in Python (byte 9 for duration when enabled)
+      // But per protocol, byte 9 is rental_unit. The duration comes from elsewhere.
+      // For now, soak_duration serves this purpose
+      this->prefill_duration_sensor_->publish_state(soak_duration);
     }
 
     if (this->soak_duration_sensor_ != nullptr) {
       this->soak_duration_sensor_->publish_state(soak_duration);
     }
 
+    // Publish binary sensors for rental/prefill settings
+    if (this->rental_regen_disabled_sensor_ != nullptr) {
+      this->rental_regen_disabled_sensor_->publish_state(rental_regen_disabled);
+    }
+
+    if (this->rental_unit_sensor_ != nullptr) {
+      this->rental_unit_sensor_->publish_state(rental_unit);
+    }
+
+    if (this->prefill_enabled_sensor_ != nullptr) {
+      this->prefill_enabled_sensor_->publish_state(prefill_enabled);
+    }
+
+    if (this->prefill_soak_mode_sensor_ != nullptr) {
+      this->prefill_soak_mode_sensor_->publish_state(prefill_soak_mode);
+    }
+
     // Parse flags (same as uu-0 byte 18)
     this->parse_flags(flags);
 
-    ESP_LOGI(TAG, "Parsed vv-0: Days until regen=%d, Reserve=%d%%, Resin=%lu grains",
-             days_until_regen, reserve_capacity, resin_capacity);
+    ESP_LOGI(TAG, "Parsed vv-0: Days until regen=%d, Regen override=%d, Reserve=%d%%, Resin=%lu grains",
+             days_until_regen, regen_day_override, reserve_capacity, resin_capacity);
 
   } else if (packet_num == 1) {
     // vv-1: Cycle times (per PROTOCOL.md)
-    // Offset 3: Backwash time
-    // Offset 4: Brine draw time
-    // Offset 5: Rapid rinse time
-    // Offset 6: Brine refill time
+    // Offset 3: Backwash time (position 1)
+    // Offset 4: Brine draw time (position 2)
+    // Offset 5: Rapid rinse time (position 3)
+    // Offset 6: Brine refill time (position 4)
+    // Offset 7-10: Positions 5-8
     // Offset 19: End marker 'C' (0x43)
     //
     // Note: High bit (0x80) = fixed/non-adjustable
     // Actual time = value & 0x7F
 
-    uint8_t backwash_raw = this->buffer_[3];
-    uint8_t brine_draw_raw = this->buffer_[4];
-    uint8_t rapid_rinse_raw = this->buffer_[5];
-    uint8_t brine_refill_raw = this->buffer_[6];
+    uint8_t backwash_raw = this->buffer_peek(3);
+    uint8_t brine_draw_raw = this->buffer_peek(4);
+    uint8_t rapid_rinse_raw = this->buffer_peek(5);
+    uint8_t brine_refill_raw = this->buffer_peek(6);
+    uint8_t pos5_raw = this->buffer_peek(7);
+    uint8_t pos6_raw = this->buffer_peek(8);
+    uint8_t pos7_raw = this->buffer_peek(9);
+    uint8_t pos8_raw = this->buffer_peek(10);
 
     // Extract actual times (mask off fixed bit)
     uint8_t backwash_time = backwash_raw & 0x7F;
     uint8_t brine_draw_time = brine_draw_raw & 0x7F;
     uint8_t rapid_rinse_time = rapid_rinse_raw & 0x7F;
     uint8_t brine_refill_time = brine_refill_raw & 0x7F;
+    uint8_t pos5_time = pos5_raw & 0x7F;
+    uint8_t pos6_time = pos6_raw & 0x7F;
+    uint8_t pos7_time = pos7_raw & 0x7F;
+    uint8_t pos8_time = pos8_raw & 0x7F;
 
     if (this->backwash_time_sensor_ != nullptr) {
       this->backwash_time_sensor_->publish_state(backwash_time);
@@ -554,47 +707,75 @@ void CulliganWaterSoftener::parse_settings_packet() {
       this->brine_refill_time_sensor_->publish_state(brine_refill_time);
     }
 
+    // Publish cycle positions 5-8
+    if (this->cycle_position_5_sensor_ != nullptr) {
+      this->cycle_position_5_sensor_->publish_state(pos5_time);
+    }
+
+    if (this->cycle_position_6_sensor_ != nullptr) {
+      this->cycle_position_6_sensor_->publish_state(pos6_time);
+    }
+
+    if (this->cycle_position_7_sensor_ != nullptr) {
+      this->cycle_position_7_sensor_->publish_state(pos7_time);
+    }
+
+    if (this->cycle_position_8_sensor_ != nullptr) {
+      this->cycle_position_8_sensor_->publish_state(pos8_time);
+    }
+
     ESP_LOGD(TAG, "Settings 1: Backwash=%d min%s, Brine draw=%d min%s, Rapid rinse=%d min%s, Brine refill=%d min%s",
              backwash_time, (backwash_raw & 0x80) ? " (fixed)" : "",
              brine_draw_time, (brine_draw_raw & 0x80) ? " (fixed)" : "",
              rapid_rinse_time, (rapid_rinse_raw & 0x80) ? " (fixed)" : "",
              brine_refill_time, (brine_refill_raw & 0x80) ? " (fixed)" : "");
+    ESP_LOGD(TAG, "Settings 1: Pos5=%d min%s, Pos6=%d min%s, Pos7=%d min%s, Pos8=%d min%s",
+             pos5_time, (pos5_raw & 0x80) ? " (fixed)" : "",
+             pos6_time, (pos6_raw & 0x80) ? " (fixed)" : "",
+             pos7_time, (pos7_raw & 0x80) ? " (fixed)" : "",
+             pos8_time, (pos8_raw & 0x80) ? " (fixed)" : "");
   }
 
   // Remove the parsed packet from buffer (20 bytes)
-  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
+  this->buffer_consume(20);
 }
 
 void CulliganWaterSoftener::parse_statistics_packet() {
-  // Statistics packets are 19 bytes (not 20)
-  if (this->buffer_.size() < 19) {
+  // ww-0 is 19 bytes, ww-1 is 20 bytes
+  if (this->buffer_size() < 19) {
     ESP_LOGD(TAG, "Statistics packet incomplete");
     return;
   }
 
-  uint8_t packet_num = this->buffer_[2];
+  uint8_t packet_num = this->buffer_peek(2);
 
   ESP_LOGD(TAG, "Statistics packet #%d", packet_num);
 
   if (packet_num == 0) {
-    // ww-0: Totals & counters (per PROTOCOL.md)
+    // ww-0: Totals & counters (BIG-ENDIAN per PROTOCOL.md)
     // Offset 3-4: Current flow (BE, ÷100 = GPM)
     // Offset 5-7: Total gallons treated (BE, 24-bit)
     // Offset 8-10: Total gallons resettable (BE, 24-bit)
     // Offset 11-12: Total regenerations (BE)
     // Offset 13-14: Regens resettable (BE)
     // Offset 15: Regen active flag
-    // Offset 19: End marker 'F' (0x46)
+    // Offset 18: End marker 'F' (0x46)
 
-    // Current flow (duplicate of uu-0, but useful during stats-only updates)
+    // Current flow
     uint16_t flow_raw = this->read_uint16_be(3);
     float current_flow = flow_raw / 100.0f;
 
     // Total gallons treated (24-bit big-endian)
     uint32_t total_gallons = this->read_uint24_be(5);
 
+    // Total gallons resettable (24-bit big-endian)
+    uint32_t total_gallons_resettable = this->read_uint24_be(8);
+
     // Total regenerations
     uint16_t total_regens = this->read_uint16_be(11);
+
+    // Total regenerations resettable
+    uint16_t total_regens_resettable = this->read_uint16_be(13);
 
     if (this->current_flow_sensor_ != nullptr) {
       this->current_flow_sensor_->publish_state(current_flow);
@@ -604,16 +785,85 @@ void CulliganWaterSoftener::parse_statistics_packet() {
       this->total_gallons_sensor_->publish_state(total_gallons);
     }
 
+    if (this->total_gallons_resettable_sensor_ != nullptr) {
+      this->total_gallons_resettable_sensor_->publish_state(total_gallons_resettable);
+    }
+
     if (this->total_regens_sensor_ != nullptr) {
       this->total_regens_sensor_->publish_state(total_regens);
     }
 
-    ESP_LOGI(TAG, "Parsed ww-0: Flow=%.2f GPM, Total gallons=%lu, Total regens=%d",
-             current_flow, total_gallons, total_regens);
+    if (this->total_regens_resettable_sensor_ != nullptr) {
+      this->total_regens_resettable_sensor_->publish_state(total_regens_resettable);
+    }
+
+    ESP_LOGI(TAG, "Parsed ww-0: Flow=%.2f GPM, Total gallons=%lu (resettable=%lu), Total regens=%d (resettable=%d)",
+             current_flow, total_gallons, total_gallons_resettable, total_regens, total_regens_resettable);
+
+    // Remove ww-0 (19 bytes)
+    this->buffer_consume(19);
+  } else if (packet_num == 1) {
+    // ww-1: Start of daily usage history data (20 bytes)
+    // Bytes 3-19 contain first 17 daily usage values
+    // Each byte × 10 = gallons for that day
+    if (this->buffer_size() < 20) {
+      ESP_LOGD(TAG, "ww-1 packet incomplete");
+      return;
+    }
+
+    // Reset daily usage tracking
+    this->daily_usage_complete_ = false;
+    memset(this->daily_usage_data_, 0, sizeof(this->daily_usage_data_));
+
+    // Extract bytes 3-19 (17 values) from ring buffer
+    uint8_t temp[17];
+    for (size_t i = 0; i < 17; i++) temp[i] = this->buffer_peek(3 + i);
+    this->parse_daily_usage_data(temp, 17, 0);
+    this->daily_usage_packet_count_ = 1;
+
+    ESP_LOGD(TAG, "Parsed ww-1: Daily usage bytes 3-19 -> index 0-16, awaiting continuations");
+
+    // Remove ww-1 (20 bytes)
+    this->buffer_consume(20);
+  } else {
+    // ww-2, ww-3 are other data types (regen history, peak flow) - skip for now
+    ESP_LOGD(TAG, "Skipping ww-%d packet", packet_num);
+    // Assume 20 bytes for ww-2/3
+    size_t packet_len = (this->buffer_size() >= 20) ? 20 : 19;
+    this->buffer_consume(packet_len);
+  }
+}
+
+void CulliganWaterSoftener::parse_daily_usage_data(const uint8_t *data, size_t len, size_t start_index) {
+  // Each byte × 10 = gallons for that day
+  for (size_t i = 0; i < len && (start_index + i) < 62; i++) {
+    this->daily_usage_data_[start_index + i] = data[i] * 10.0f;
+  }
+}
+
+void CulliganWaterSoftener::calculate_avg_daily_usage() {
+  // Calculate average from last 31 non-zero values (second half of 62-day history)
+  // Per APK: averages indices 31-61 (the more recent half)
+  float sum = 0.0f;
+  int count = 0;
+
+  for (int i = 31; i < 62; i++) {
+    if (this->daily_usage_data_[i] > 0) {
+      sum += this->daily_usage_data_[i];
+      count++;
+    }
   }
 
-  // Remove the parsed packet from buffer (19 bytes for ww packets)
-  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 19);
+  float avg = 0.0f;
+  if (count > 0) {
+    avg = sum / count;
+  }
+
+  if (this->avg_daily_usage_sensor_ != nullptr) {
+    this->avg_daily_usage_sensor_->publish_state(avg);
+  }
+
+  ESP_LOGI(TAG, "Calculated avg daily usage: %.0f gal (from %d non-zero days)", avg, count);
 }
 
 // ============================================================================
@@ -733,28 +983,16 @@ void CulliganWaterSoftener::send_keepalive() {
 }
 
 void CulliganWaterSoftener::request_data() {
-  ESP_LOGI(TAG, "Requesting data from device...");
+  ESP_LOGD(TAG, "Starting data request sequence...");
 
-  // Request status (uu)
-  uint8_t status_req[20];
-  memset(status_req, 0x75, 20);  // 'u'
-  this->write_command(status_req, 20);
+  // Reset daily usage tracking for fresh data
+  this->daily_usage_packet_count_ = 0;
+  this->daily_usage_complete_ = false;
 
-  delay(20);
-
-  // Request settings (vv)
-  uint8_t settings_req[20];
-  memset(settings_req, 0x76, 20);  // 'v'
-  this->write_command(settings_req, 20);
-
-  delay(20);
-
-  // Request statistics (ww)
-  uint8_t stats_req[20];
-  memset(stats_req, 0x77, 20);  // 'w'
-  this->write_command(stats_req, 20);
-
-  ESP_LOGI(TAG, "Data requests sent (u, v, w)");
+  // Start non-blocking request state machine
+  // The actual requests are sent in loop() with 20ms spacing
+  this->request_state_ = REQ_STATUS;
+  this->request_time_ = millis() - 20;  // Trigger immediate first request
 }
 
 void CulliganWaterSoftener::send_regen_now() {
@@ -776,35 +1014,45 @@ void CulliganWaterSoftener::send_regen_next() {
 }
 
 void CulliganWaterSoftener::send_sync_time() {
-  ESP_LOGI(TAG, "Sending sync time command");
-
   // Get current time from ESP32
   time_t now = time(nullptr);
   struct tm timeinfo;
   localtime_r(&now, &timeinfo);
 
-  uint8_t hour = timeinfo.tm_hour;
+  // Check if time is valid (year > 2020 means we have a real time source)
+  if (timeinfo.tm_year < 120) {  // tm_year is years since 1900, so 120 = 2020
+    ESP_LOGW(TAG, "Cannot sync time: ESP32 time not set. Add 'time:' component with 'platform: homeassistant' to your config.");
+    return;
+  }
+
+  uint8_t hour_24 = timeinfo.tm_hour;
   uint8_t minute = timeinfo.tm_min;
   uint8_t second = timeinfo.tm_sec;
+  uint8_t hour_12 = hour_24;
   uint8_t am_pm = 0;
 
   // Convert to 12-hour format
-  if (hour == 0) {
-    hour = 12;
+  if (hour_24 == 0) {
+    hour_12 = 12;
     am_pm = 0;  // AM
-  } else if (hour < 12) {
+  } else if (hour_24 < 12) {
+    hour_12 = hour_24;
     am_pm = 0;  // AM
-  } else if (hour == 12) {
+  } else if (hour_24 == 12) {
+    hour_12 = 12;
     am_pm = 1;  // PM
   } else {
-    hour -= 12;
+    hour_12 = hour_24 - 12;
     am_pm = 1;  // PM
   }
+
+  ESP_LOGI(TAG, "Sending sync time: %02d:%02d:%02d (24h) -> %d:%02d:%02d %s",
+           hour_24, minute, second, hour_12, minute, second, am_pm ? "PM" : "AM");
 
   uint8_t cmd[20];
   memset(cmd, 0x75, 20);  // 'u' base
   cmd[13] = 'T';     // 0x54
-  cmd[14] = hour;
+  cmd[14] = hour_12;
   cmd[15] = minute;
   cmd[16] = am_pm;
   cmd[17] = second;
@@ -894,31 +1142,8 @@ void CulliganWaterSoftener::send_set_salt_level(float lbs) {
 // Helper Methods
 // ============================================================================
 
-uint16_t CulliganWaterSoftener::read_uint16_be(size_t offset) {
-  if (offset + 1 >= this->buffer_.size()) {
-    return 0;
-  }
-  return ((uint16_t)this->buffer_[offset] << 8) | (uint16_t)this->buffer_[offset + 1];
-}
-
-uint32_t CulliganWaterSoftener::read_uint24_be(size_t offset) {
-  if (offset + 2 >= this->buffer_.size()) {
-    return 0;
-  }
-  return ((uint32_t)this->buffer_[offset] << 16) |
-         ((uint32_t)this->buffer_[offset + 1] << 8) |
-         (uint32_t)this->buffer_[offset + 2];
-}
-
-uint32_t CulliganWaterSoftener::read_uint32_be(size_t offset) {
-  if (offset + 3 >= this->buffer_.size()) {
-    return 0;
-  }
-  return ((uint32_t)this->buffer_[offset] << 24) |
-         ((uint32_t)this->buffer_[offset + 1] << 16) |
-         ((uint32_t)this->buffer_[offset + 2] << 8) |
-         (uint32_t)this->buffer_[offset + 3];
-}
+// Note: read_uint16_be, read_uint24_be, read_uint32_be, read_uint16_le, read_uint32_le
+// are now inline in the header file for better performance
 
 float CulliganWaterSoftener::get_battery_percent(uint8_t raw) {
   // Battery lookup table per PROTOCOL.md

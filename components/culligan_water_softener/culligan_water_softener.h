@@ -201,6 +201,21 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   void set_rapid_rinse_time_sensor(sensor::Sensor *sensor) { rapid_rinse_time_sensor_ = sensor; }
   void set_brine_refill_time_sensor(sensor::Sensor *sensor) { brine_refill_time_sensor_ = sensor; }
 
+  // Additional sensor setters (from Python script)
+  void set_filter_backwash_days_sensor(sensor::Sensor *sensor) { filter_backwash_days_sensor_ = sensor; }
+  void set_air_recharge_days_sensor(sensor::Sensor *sensor) { air_recharge_days_sensor_ = sensor; }
+  void set_low_salt_alert_sensor(sensor::Sensor *sensor) { low_salt_alert_sensor_ = sensor; }
+  void set_brine_tank_capacity_sensor(sensor::Sensor *sensor) { brine_tank_capacity_sensor_ = sensor; }
+  void set_brine_salt_percent_sensor(sensor::Sensor *sensor) { brine_salt_percent_sensor_ = sensor; }
+  void set_regen_day_override_sensor(sensor::Sensor *sensor) { regen_day_override_sensor_ = sensor; }
+  void set_air_recharge_frequency_sensor(sensor::Sensor *sensor) { air_recharge_frequency_sensor_ = sensor; }
+  void set_total_gallons_resettable_sensor(sensor::Sensor *sensor) { total_gallons_resettable_sensor_ = sensor; }
+  void set_total_regens_resettable_sensor(sensor::Sensor *sensor) { total_regens_resettable_sensor_ = sensor; }
+  void set_cycle_position_5_sensor(sensor::Sensor *sensor) { cycle_position_5_sensor_ = sensor; }
+  void set_cycle_position_6_sensor(sensor::Sensor *sensor) { cycle_position_6_sensor_ = sensor; }
+  void set_cycle_position_7_sensor(sensor::Sensor *sensor) { cycle_position_7_sensor_ = sensor; }
+  void set_cycle_position_8_sensor(sensor::Sensor *sensor) { cycle_position_8_sensor_ = sensor; }
+
   // Text sensor setters
   void set_firmware_version_sensor(text_sensor::TextSensor *sensor) { firmware_version_sensor_ = sensor; }
   void set_device_time_sensor(text_sensor::TextSensor *sensor) { device_time_sensor_ = sensor; }
@@ -211,6 +226,10 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   void set_bypass_active_sensor(binary_sensor::BinarySensor *sensor) { bypass_active_sensor_ = sensor; }
   void set_shutoff_active_sensor(binary_sensor::BinarySensor *sensor) { shutoff_active_sensor_ = sensor; }
   void set_regen_active_sensor(binary_sensor::BinarySensor *sensor) { regen_active_sensor_ = sensor; }
+  void set_rental_regen_disabled_sensor(binary_sensor::BinarySensor *sensor) { rental_regen_disabled_sensor_ = sensor; }
+  void set_rental_unit_sensor(binary_sensor::BinarySensor *sensor) { rental_unit_sensor_ = sensor; }
+  void set_prefill_enabled_sensor(binary_sensor::BinarySensor *sensor) { prefill_enabled_sensor_ = sensor; }
+  void set_prefill_soak_mode_sensor(binary_sensor::BinarySensor *sensor) { prefill_soak_mode_sensor_ = sensor; }
 
   // Button setters
   void set_regen_now_button(RegenNowButton *button) { regen_now_button_ = button; }
@@ -251,8 +270,12 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   uint16_t tx_handle_{0};
   uint16_t rx_handle_{0};
 
-  // Protocol parser state
-  std::vector<uint8_t> buffer_;
+  // Protocol parser state - ring buffer for efficiency
+  static constexpr size_t BUFFER_SIZE = 256;  // Power of 2 for fast modulo
+  uint8_t buffer_[BUFFER_SIZE];
+  size_t buffer_head_{0};  // Write position
+  size_t buffer_tail_{0};  // Read position
+
   bool handshake_received_{false};
   bool authenticated_{false};
   uint8_t status_packet_count_{0};
@@ -260,6 +283,11 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   uint8_t firmware_major_{0};
   uint8_t firmware_minor_{0};
   bool auth_required_{false};
+
+  // Non-blocking request state machine
+  enum RequestState { REQ_IDLE, REQ_STATUS, REQ_SETTINGS, REQ_STATS, REQ_DONE };
+  RequestState request_state_{REQ_IDLE};
+  uint32_t request_time_{0};
 
   // Brine tank configuration (from uu-1)
   uint8_t brine_tank_type_{16};
@@ -271,6 +299,11 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   // Current flag states
   uint8_t current_flags_{0};
   bool regen_active_{false};
+
+  // Daily usage history for avg calculation (62 days)
+  float daily_usage_data_[62] = {0};
+  uint8_t daily_usage_packet_count_{0};
+  bool daily_usage_complete_{false};
 
   // Configuration
   uint16_t password_{DEFAULT_PASSWORD};
@@ -302,6 +335,21 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   sensor::Sensor *rapid_rinse_time_sensor_{nullptr};
   sensor::Sensor *brine_refill_time_sensor_{nullptr};
 
+  // Additional sensors (from Python script)
+  sensor::Sensor *filter_backwash_days_sensor_{nullptr};
+  sensor::Sensor *air_recharge_days_sensor_{nullptr};
+  sensor::Sensor *low_salt_alert_sensor_{nullptr};
+  sensor::Sensor *brine_tank_capacity_sensor_{nullptr};
+  sensor::Sensor *brine_salt_percent_sensor_{nullptr};
+  sensor::Sensor *regen_day_override_sensor_{nullptr};
+  sensor::Sensor *air_recharge_frequency_sensor_{nullptr};
+  sensor::Sensor *total_gallons_resettable_sensor_{nullptr};
+  sensor::Sensor *total_regens_resettable_sensor_{nullptr};
+  sensor::Sensor *cycle_position_5_sensor_{nullptr};
+  sensor::Sensor *cycle_position_6_sensor_{nullptr};
+  sensor::Sensor *cycle_position_7_sensor_{nullptr};
+  sensor::Sensor *cycle_position_8_sensor_{nullptr};
+
   // Text sensors
   text_sensor::TextSensor *firmware_version_sensor_{nullptr};
   text_sensor::TextSensor *device_time_sensor_{nullptr};
@@ -312,6 +360,10 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   binary_sensor::BinarySensor *bypass_active_sensor_{nullptr};
   binary_sensor::BinarySensor *shutoff_active_sensor_{nullptr};
   binary_sensor::BinarySensor *regen_active_sensor_{nullptr};
+  binary_sensor::BinarySensor *rental_regen_disabled_sensor_{nullptr};
+  binary_sensor::BinarySensor *rental_unit_sensor_{nullptr};
+  binary_sensor::BinarySensor *prefill_enabled_sensor_{nullptr};
+  binary_sensor::BinarySensor *prefill_soak_mode_sensor_{nullptr};
 
   // Buttons
   RegenNowButton *regen_now_button_{nullptr};
@@ -345,10 +397,59 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   // Write command helper
   void write_command(const uint8_t *data, size_t length);
 
-  // Big-endian helper methods (protocol uses BIG-ENDIAN)
-  uint16_t read_uint16_be(size_t offset);
-  uint32_t read_uint24_be(size_t offset);
-  uint32_t read_uint32_be(size_t offset);
+  // Ring buffer helper methods (inline for performance)
+  inline size_t buffer_size() const {
+    return (buffer_head_ >= buffer_tail_) ?
+           (buffer_head_ - buffer_tail_) :
+           (BUFFER_SIZE - buffer_tail_ + buffer_head_);
+  }
+
+  inline void buffer_clear() {
+    buffer_head_ = 0;
+    buffer_tail_ = 0;
+  }
+
+  inline uint8_t buffer_peek(size_t offset) const {
+    return buffer_[(buffer_tail_ + offset) & (BUFFER_SIZE - 1)];
+  }
+
+  inline void buffer_consume(size_t count) {
+    buffer_tail_ = (buffer_tail_ + count) & (BUFFER_SIZE - 1);
+  }
+
+  void buffer_append(const uint8_t *data, size_t length);
+
+  // Big-endian helper methods (inline for performance)
+  inline uint16_t read_uint16_be(size_t offset) {
+    return (static_cast<uint16_t>(buffer_peek(offset)) << 8) |
+            static_cast<uint16_t>(buffer_peek(offset + 1));
+  }
+
+  inline uint32_t read_uint24_be(size_t offset) {
+    return (static_cast<uint32_t>(buffer_peek(offset)) << 16) |
+           (static_cast<uint32_t>(buffer_peek(offset + 1)) << 8) |
+            static_cast<uint32_t>(buffer_peek(offset + 2));
+  }
+
+  inline uint32_t read_uint32_be(size_t offset) {
+    return (static_cast<uint32_t>(buffer_peek(offset)) << 24) |
+           (static_cast<uint32_t>(buffer_peek(offset + 1)) << 16) |
+           (static_cast<uint32_t>(buffer_peek(offset + 2)) << 8) |
+            static_cast<uint32_t>(buffer_peek(offset + 3));
+  }
+
+  // Little-endian helper methods (inline for performance)
+  inline uint16_t read_uint16_le(size_t offset) {
+    return static_cast<uint16_t>(buffer_peek(offset)) |
+          (static_cast<uint16_t>(buffer_peek(offset + 1)) << 8);
+  }
+
+  inline uint32_t read_uint32_le(size_t offset) {
+    return static_cast<uint32_t>(buffer_peek(offset)) |
+          (static_cast<uint32_t>(buffer_peek(offset + 1)) << 8) |
+          (static_cast<uint32_t>(buffer_peek(offset + 2)) << 16) |
+          (static_cast<uint32_t>(buffer_peek(offset + 3)) << 24);
+  }
 
   // Battery level lookup
   float get_battery_percent(uint8_t raw);
@@ -363,6 +464,10 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
 
   // Flag parsing
   void parse_flags(uint8_t flags);
+
+  // Daily usage history parsing
+  void parse_daily_usage_data(const uint8_t *data, size_t len, size_t start_index);
+  void calculate_avg_daily_usage();
 };
 
 }  // namespace culligan_water_softener

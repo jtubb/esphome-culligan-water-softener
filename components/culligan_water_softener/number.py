@@ -16,6 +16,7 @@ from . import (
     ReserveCapacityNumber,
     SaltLevelNumber,
     UNIT_GPG,
+    UNIT_HOURS,
     UNIT_LBS,
 )
 
@@ -40,6 +41,7 @@ CONFIG_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_REGEN_TIME_HOUR): number.number_schema(
             RegenTimeHourNumber,
+            unit_of_measurement=UNIT_HOURS,
             icon="mdi:clock",
         ),
         cv.Optional(CONF_RESERVE_CAPACITY): number.number_schema(

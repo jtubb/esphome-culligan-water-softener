@@ -15,6 +15,10 @@ CONF_DISPLAY_OFF = "display_off"
 CONF_BYPASS_ACTIVE = "bypass_active"
 CONF_SHUTOFF_ACTIVE = "shutoff_active"
 CONF_REGEN_ACTIVE = "regeneration_active"
+CONF_RENTAL_REGEN_DISABLED = "rental_regen_disabled"
+CONF_RENTAL_UNIT = "rental_unit"
+CONF_PREFILL_ENABLED = "prefill_enabled"
+CONF_PREFILL_SOAK_MODE = "prefill_soak_mode"
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -30,6 +34,18 @@ CONFIG_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_REGEN_ACTIVE): binary_sensor.binary_sensor_schema(
             icon="mdi:refresh",
+        ),
+        cv.Optional(CONF_RENTAL_REGEN_DISABLED): binary_sensor.binary_sensor_schema(
+            icon="mdi:lock",
+        ),
+        cv.Optional(CONF_RENTAL_UNIT): binary_sensor.binary_sensor_schema(
+            icon="mdi:home-group",
+        ),
+        cv.Optional(CONF_PREFILL_ENABLED): binary_sensor.binary_sensor_schema(
+            icon="mdi:water-plus",
+        ),
+        cv.Optional(CONF_PREFILL_SOAK_MODE): binary_sensor.binary_sensor_schema(
+            icon="mdi:timer-sand",
         ),
     }
 )
@@ -54,3 +70,19 @@ async def to_code(config):
     if CONF_REGEN_ACTIVE in config:
         sens = await binary_sensor.new_binary_sensor(config[CONF_REGEN_ACTIVE])
         cg.add(parent.set_regen_active_sensor(sens))
+
+    if CONF_RENTAL_REGEN_DISABLED in config:
+        sens = await binary_sensor.new_binary_sensor(config[CONF_RENTAL_REGEN_DISABLED])
+        cg.add(parent.set_rental_regen_disabled_sensor(sens))
+
+    if CONF_RENTAL_UNIT in config:
+        sens = await binary_sensor.new_binary_sensor(config[CONF_RENTAL_UNIT])
+        cg.add(parent.set_rental_unit_sensor(sens))
+
+    if CONF_PREFILL_ENABLED in config:
+        sens = await binary_sensor.new_binary_sensor(config[CONF_PREFILL_ENABLED])
+        cg.add(parent.set_prefill_enabled_sensor(sens))
+
+    if CONF_PREFILL_SOAK_MODE in config:
+        sens = await binary_sensor.new_binary_sensor(config[CONF_PREFILL_SOAK_MODE])
+        cg.add(parent.set_prefill_soak_mode_sensor(sens))

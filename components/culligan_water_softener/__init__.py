@@ -36,7 +36,7 @@ UNIT_GPG = "GPG"
 UNIT_LBS = "lbs"
 UNIT_GALLON = "gal"
 UNIT_MINUTES = "min"
-UNIT_HOURS = "h"
+UNIT_HOURS = "hrs"
 UNIT_GRAINS = "grains"
 
 # Configuration keys
