@@ -160,60 +160,32 @@ void CulliganWaterSoftener::handle_notification(const uint8_t *data, uint16_t le
 }
 
 void CulliganWaterSoftener::process_buffer() {
-  // Keep processing while we have potential packets
-  // Note: Handshake packets can be 18 bytes, data packets are 20 bytes
-  while (this->buffer_.size() >= 18) {
-    uint8_t type0 = this->buffer_[0];
-    uint8_t type1 = this->buffer_[1];
+  // Process ONE packet per call to avoid watchdog timeout
+  // Note: Handshake packets are 18 bytes, data packets vary (19-20 bytes)
+  if (this->buffer_.size() < 18) {
+    return;  // Not enough data yet
+  }
 
-    bool packet_parsed = false;
+  uint8_t type0 = this->buffer_[0];
+  uint8_t type1 = this->buffer_[1];
 
-    if (type0 == 0x74 && type1 == 0x74) {  // "tt" - Handshake
-      this->parse_handshake();
-      packet_parsed = true;
-    } else if (type0 == 0x75 && type1 == 0x75) {  // "uu" - Status
-      this->parse_status_packet();
-      packet_parsed = true;
-    } else if (type0 == 0x76 && type1 == 0x76) {  // "vv" - Settings
-      this->parse_settings_packet();
-      packet_parsed = true;
-    } else if (type0 == 0x77 && type1 == 0x77) {  // "ww" - Statistics
-      this->parse_statistics_packet();
-      packet_parsed = true;
-    } else if (type0 == 0x78 && type1 == 0x78) {  // "xx" - Keepalive
-      ESP_LOGD(TAG, "Keepalive packet received");
-      this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
-      packet_parsed = true;
-    }
-
-    if (!packet_parsed) {
-      // Unknown packet type - try to find a valid header by scanning forward
-      ESP_LOGW(TAG, "Unknown packet start: 0x%02X 0x%02X, scanning for valid header...", type0, type1);
-
-      // Look for a valid header in the buffer
-      bool found_header = false;
-      for (size_t i = 1; i < this->buffer_.size() - 1; i++) {
-        uint8_t b0 = this->buffer_[i];
-        uint8_t b1 = this->buffer_[i + 1];
-        if ((b0 == 0x74 && b1 == 0x74) ||  // tt
-            (b0 == 0x75 && b1 == 0x75) ||  // uu
-            (b0 == 0x76 && b1 == 0x76) ||  // vv
-            (b0 == 0x77 && b1 == 0x77) ||  // ww
-            (b0 == 0x78 && b1 == 0x78)) {  // xx
-          ESP_LOGW(TAG, "Found valid header at offset %d, discarding %d bytes", i, i);
-          this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + i);
-          found_header = true;
-          break;
-        }
-      }
-
-      if (!found_header) {
-        // No valid header found, discard one byte and try again
-        ESP_LOGW(TAG, "No valid header found, discarding buffer");
-        this->buffer_.clear();
-        break;
-      }
-    }
+  if (type0 == 0x74 && type1 == 0x74) {  // "tt" - Handshake
+    this->parse_handshake();
+  } else if (type0 == 0x75 && type1 == 0x75) {  // "uu" - Status
+    this->parse_status_packet();
+  } else if (type0 == 0x76 && type1 == 0x76) {  // "vv" - Settings
+    this->parse_settings_packet();
+  } else if (type0 == 0x77 && type1 == 0x77) {  // "ww" - Statistics
+    this->parse_statistics_packet();
+  } else if (type0 == 0x78 && type1 == 0x78) {  // "xx" - Keepalive
+    ESP_LOGD(TAG, "Keepalive packet received");
+    // Find end marker and remove packet
+    size_t packet_len = (this->buffer_.size() >= 20) ? 20 : this->buffer_.size();
+    this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + packet_len);
+  } else {
+    // Unknown packet type - discard first byte and try again next time
+    ESP_LOGW(TAG, "Unknown packet start: 0x%02X 0x%02X, discarding byte", type0, type1);
+    this->buffer_.erase(this->buffer_.begin());
   }
 }
 
@@ -523,7 +495,8 @@ void CulliganWaterSoftener::parse_settings_packet() {
 }
 
 void CulliganWaterSoftener::parse_statistics_packet() {
-  if (this->buffer_.size() < 20) {
+  // Statistics packets are 19 bytes (not 20)
+  if (this->buffer_.size() < 19) {
     ESP_LOGD(TAG, "Statistics packet incomplete");
     return;
   }
@@ -568,8 +541,8 @@ void CulliganWaterSoftener::parse_statistics_packet() {
              current_flow, total_gallons, total_regens);
   }
 
-  // Remove the parsed packet from buffer (20 bytes)
-  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
+  // Remove the parsed packet from buffer (19 bytes for ww packets)
+  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 19);
 }
 
 // ============================================================================
