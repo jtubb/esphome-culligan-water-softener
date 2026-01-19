@@ -8,10 +8,11 @@ This component enables direct BLE communication between your ESP32 and Culligan 
 
 - **Native BLE** - Direct ESP32 to water softener communication
 - **Authentication** - CRC8-based auth for firmware < 6.0
-- **20+ Sensors** - Real-time flow, usage, battery, settings, and statistics
+- **30+ Sensors** - Real-time flow, usage, battery, cycle times, and statistics
+- **12 Adjustable Settings** - Control hardness, regen schedule, cycle times, salt alerts
 - **Device Control** - Buttons for regeneration, time sync, counter reset
-- **Adjustable Settings** - Number inputs for hardness, regen time, salt level
-- **Binary Sensors** - Status flags (display, bypass, shutoff, regenerating)
+- **Display Switch** - Toggle device display on/off
+- **8 Binary Sensors** - Status flags (display, bypass, shutoff, regenerating, rental, prefill)
 - **Home Assistant** - Automatic discovery and integration
 
 ## Sensors & Controls
@@ -25,16 +26,30 @@ This component enables direct BLE communication between your ESP32 and Culligan 
 | `peak_flow_today` | GPM | Max flow today |
 | `water_hardness` | GPG | Hardness setting |
 | `brine_level` | lbs | Salt remaining |
+| `brine_tank_capacity` | lbs | Max salt capacity |
+| `brine_salt_percent` | % | Salt level percentage |
+| `low_salt_alert` | % | Low salt alert threshold |
+| `avg_daily_usage` | gal | Average daily usage |
 | `days_until_regen` | days | Time to next regen |
+| `regen_day_override` | days | Forced regen interval |
 | `total_gallons` | gal | Lifetime treated |
 | `total_regenerations` | - | Lifetime regen count |
+| `total_gallons_resettable` | gal | Resettable gallon counter |
+| `total_regenerations_resettable` | - | Resettable regen counter |
 | `battery_level` | % | Device battery |
 | `reserve_capacity` | % | Reserve setting |
 | `resin_capacity` | grains | Resin capacity |
-| `backwash_time` | min | Cycle time |
-| `brine_draw_time` | min | Cycle time |
-| `rapid_rinse_time` | min | Cycle time |
-| `brine_refill_time` | min | Cycle time |
+| `filter_backwash_days` | days | Days until filter backwash |
+| `air_recharge_days` | days | Days until air recharge |
+| `air_recharge_frequency` | days | Air recharge interval |
+| `backwash_time` | min | Cycle position 1 time |
+| `brine_draw_time` | min | Cycle position 2 time |
+| `rapid_rinse_time` | min | Cycle position 3 time |
+| `brine_refill_time` | min | Cycle position 4 time |
+| `cycle_position_5` | min | Cycle position 5 time |
+| `cycle_position_6` | min | Cycle position 6 time |
+| `cycle_position_7` | min | Cycle position 7 time |
+| `cycle_position_8` | min | Cycle position 8 time |
 
 ### Text Sensors
 | Sensor | Description |
@@ -50,6 +65,10 @@ This component enables direct BLE communication between your ESP32 and Culligan 
 | `bypass_active` | Bypass mode active |
 | `shutoff_active` | Shutoff active |
 | `regeneration_active` | Currently regenerating |
+| `rental_regen_disabled` | Regeneration disabled (rental unit) |
+| `rental_unit` | Device is a rental unit |
+| `prefill_enabled` | Pre-fill feature enabled |
+| `prefill_soak_mode` | Pre-fill soak mode active |
 
 ### Buttons (Commands)
 | Button | Action |
@@ -66,12 +85,43 @@ This component enables direct BLE communication between your ESP32 and Culligan 
 | `display` | Turn display on/off |
 
 ### Number (Adjustable Settings)
+
+All settings are read from the device on connection and updated in real-time. Changes are sent to the device immediately when adjusted.
+
 | Setting | Range | Description |
 |---------|-------|-------------|
-| `water_hardness` | 0-99 GPG | Water hardness |
-| `regeneration_time_hour` | 1-12 | Regen hour |
-| `reserve_capacity` | 0-49% | Reserve capacity |
-| `salt_level` | 0-500 lbs | Salt level |
+| `water_hardness` | 0-99 GPG | Input water hardness - determines how much softening is needed per gallon |
+| `regeneration_time_hour` | 1-12 | Hour of day for scheduled regeneration (in 12-hour format) |
+| `reserve_capacity` | 0-49% | Reserve capacity percentage - triggers early regen if usage exceeds prediction |
+| `salt_level` | 0-500 lbs | Current salt level in brine tank - updates regens remaining calculation |
+| `regen_days` | 0-29 days | Force regeneration every N days (0 = demand-based only) |
+| `resin_capacity` | 0-399 (×1000 grains) | Total resin capacity in thousands of grains (e.g., 32 = 32,000 grains) |
+| `prefill_duration` | 0-4 hrs | Pre-fill soak duration in hours (0 = disabled) |
+| `backwash_time` | 0-99 min | Cycle position 1: Backwash duration |
+| `brine_draw_time` | 0-99 min | Cycle position 2: Brine draw duration |
+| `rapid_rinse_time` | 0-99 min | Cycle position 3: Rapid rinse duration |
+| `brine_refill_time` | 0-99 min | Cycle position 4: Brine tank refill duration |
+| `low_salt_alert` | 0-100% | Salt level percentage threshold for low salt warning |
+
+#### Setting Details
+
+**Water Hardness**: Set this to match your water test results. Higher hardness means more frequent regeneration.
+
+**Regeneration Time**: The device regenerates at this hour. Choose a time when water usage is low (typically 2-3 AM).
+
+**Reserve Capacity**: Safety margin for unexpected high usage. At 25%, if you use 75% of capacity, it will regenerate early.
+
+**Salt Level**: Manually update after adding salt. The device calculates remaining regenerations based on this value.
+
+**Regen Days Override**: Forces regeneration every N days regardless of water usage. Useful for vacation homes or low-usage periods. Set to 0 for pure demand-based regeneration.
+
+**Resin Capacity**: Total softening capacity of your resin bed. Only change if you've replaced the resin or know your exact capacity.
+
+**Prefill Duration**: Pre-fills the brine tank before regeneration. Can improve efficiency but uses more water. Set to 0 to disable.
+
+**Cycle Times (Backwash, Brine Draw, Rapid Rinse, Brine Refill)**: Duration of each regeneration phase. These are typically set at installation and rarely need adjustment. Note: Some cycle times may be fixed by the device and not adjustable.
+
+**Low Salt Alert**: Threshold percentage for triggering low salt warnings. At 25%, you'll be alerted when salt drops to 25% of tank capacity.
 
 ## Installation
 
