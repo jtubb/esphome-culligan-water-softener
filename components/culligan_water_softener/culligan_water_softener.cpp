@@ -330,8 +330,8 @@ void CulliganWaterSoftener::parse_status_packet() {
       this->regen_time_sensor_->publish_state(this->format_time_12h(regen_hour, 0, regen_am_pm));
     }
 
-    ESP_LOGD(TAG, "Status 0: Time=%s, Battery=%.0f%%, Flow=%.2f GPM, Soft Water=%d gal, Usage=%d gal, Peak=%.2f GPM, Hardness=%d GPG",
-             this->format_time_12h(hour, minute, am_pm).c_str(), battery_pct, current_flow, soft_water, usage_today, peak_flow, hardness);
+    ESP_LOGI(TAG, "Parsed uu-0: Time=%d:%02d %s, Flow=%.2f GPM, Soft Water=%d gal, Usage=%d gal",
+             hour, minute, am_pm ? "PM" : "AM", current_flow, soft_water, usage_today);
 
   } else if (packet_num == 1) {
     // uu-1: Brine tank & regen status (per PROTOCOL.md)
@@ -379,8 +379,8 @@ void CulliganWaterSoftener::parse_status_packet() {
       }
     }
 
-    ESP_LOGD(TAG, "Status 1: Regen active=%d, Tank type=%d, Regens remaining=%d",
-             regen_active, tank_type, regens_remaining);
+    ESP_LOGI(TAG, "Parsed uu-1: Regen active=%d, Salt=%.1f lbs",
+             regen_active, this->brine_tank_configured_ ? this->calculate_salt_remaining() : 0.0f);
   }
 
   // Remove the parsed packet from buffer (20 bytes)
@@ -442,7 +442,7 @@ void CulliganWaterSoftener::parse_settings_packet() {
     // Parse flags (same as uu-0 byte 18)
     this->parse_flags(flags);
 
-    ESP_LOGD(TAG, "Settings 0: Days until regen=%d, Reserve=%d%%, Resin=%lu grains",
+    ESP_LOGI(TAG, "Parsed vv-0: Days until regen=%d, Reserve=%d%%, Resin=%lu grains",
              days_until_regen, reserve_capacity, resin_capacity);
 
   } else if (packet_num == 1) {
@@ -537,7 +537,7 @@ void CulliganWaterSoftener::parse_statistics_packet() {
       this->total_regens_sensor_->publish_state(total_regens);
     }
 
-    ESP_LOGD(TAG, "Statistics: Flow=%.2f GPM, Total gallons=%lu, Total regens=%d",
+    ESP_LOGI(TAG, "Parsed ww-0: Flow=%.2f GPM, Total gallons=%lu, Total regens=%d",
              current_flow, total_gallons, total_regens);
   }
 
