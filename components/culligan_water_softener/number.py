@@ -178,8 +178,8 @@ async def to_code(config):
         num = await number.new_number(
             config[CONF_RESIN_CAPACITY],
             min_value=0,
-            max_value=399,  # Thousands of grains (0-399k)
-            step=1,
+            max_value=399000,  # Full grain value (0-399,000)
+            step=1000,
         )
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])

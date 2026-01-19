@@ -95,7 +95,7 @@ All settings are read from the device on connection and updated in real-time. Ch
 | `reserve_capacity` | 0-49% | Reserve capacity percentage - triggers early regen if usage exceeds prediction |
 | `salt_level` | 0-500 lbs | Current salt level in brine tank - updates regens remaining calculation |
 | `regen_days` | 0-29 days | Force regeneration every N days (0 = demand-based only) |
-| `resin_capacity` | 0-399 (×1000 grains) | Total resin capacity in thousands of grains (e.g., 32 = 32,000 grains) |
+| `resin_capacity` | 0-399,000 grains | Total resin capacity in grains (e.g., 32000 = 32,000 grains) |
 | `prefill_duration` | 0-4 hrs | Pre-fill soak duration in hours (0 = disabled) |
 | `backwash_time` | 0-99 min | Cycle position 1: Backwash duration |
 | `brine_draw_time` | 0-99 min | Cycle position 2: Brine draw duration |
