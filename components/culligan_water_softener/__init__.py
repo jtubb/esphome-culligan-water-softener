@@ -29,6 +29,14 @@ HardnessNumber = culligan_ns.class_("HardnessNumber", cg.Component)
 RegenTimeHourNumber = culligan_ns.class_("RegenTimeHourNumber", cg.Component)
 ReserveCapacityNumber = culligan_ns.class_("ReserveCapacityNumber", cg.Component)
 SaltLevelNumber = culligan_ns.class_("SaltLevelNumber", cg.Component)
+RegenDaysNumber = culligan_ns.class_("RegenDaysNumber", cg.Component)
+ResinCapacityNumber = culligan_ns.class_("ResinCapacityNumber", cg.Component)
+PrefillDurationNumber = culligan_ns.class_("PrefillDurationNumber", cg.Component)
+BackwashTimeNumber = culligan_ns.class_("BackwashTimeNumber", cg.Component)
+BrineDrawTimeNumber = culligan_ns.class_("BrineDrawTimeNumber", cg.Component)
+RapidRinseTimeNumber = culligan_ns.class_("RapidRinseTimeNumber", cg.Component)
+BrineRefillTimeNumber = culligan_ns.class_("BrineRefillTimeNumber", cg.Component)
+LowSaltAlertNumber = culligan_ns.class_("LowSaltAlertNumber", cg.Component)
 
 # Custom units
 UNIT_GPM = "GPM"

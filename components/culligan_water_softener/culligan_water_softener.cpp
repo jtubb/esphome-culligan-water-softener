@@ -1138,6 +1138,60 @@ void CulliganWaterSoftener::send_set_salt_level(float lbs) {
   this->write_command(cmd, 20);
 }
 
+void CulliganWaterSoftener::send_set_regen_days(uint8_t days) {
+  ESP_LOGI(TAG, "Setting regen days to %d", days);
+  uint8_t cmd[20];
+  memset(cmd, 0x76, 20);  // 'v' = AdvancedSettings
+  cmd[13] = 'A';  // 0x41
+  cmd[14] = (days > 29) ? 29 : days;
+  this->write_command(cmd, 20);
+}
+
+void CulliganWaterSoftener::send_set_resin_capacity(uint16_t grains_thousands) {
+  ESP_LOGI(TAG, "Setting resin capacity to %d thousand grains", grains_thousands);
+  uint16_t value = (grains_thousands > 399) ? 399 : grains_thousands;
+  uint8_t cmd[20];
+  memset(cmd, 0x76, 20);  // 'v' = AdvancedSettings
+  cmd[13] = 'C';  // 0x43
+  cmd[14] = value / 256;
+  cmd[15] = value % 256;
+  this->write_command(cmd, 20);
+}
+
+void CulliganWaterSoftener::send_set_prefill(bool enable, uint8_t duration_hours) {
+  ESP_LOGI(TAG, "Setting prefill: %s, %d hours", enable ? "enabled" : "disabled", duration_hours);
+  uint8_t cmd[20];
+  memset(cmd, 0x76, 20);  // 'v' = AdvancedSettings
+  cmd[13] = 'R';  // 0x52
+  cmd[14] = 'P';  // 0x50
+  cmd[15] = enable ? 1 : 0;
+  cmd[16] = (duration_hours < 1) ? 1 : ((duration_hours > 4) ? 4 : duration_hours);
+  this->write_command(cmd, 20);
+}
+
+void CulliganWaterSoftener::send_set_cycle_time(uint8_t position, uint8_t minutes) {
+  ESP_LOGI(TAG, "Setting cycle position %c to %d minutes", (char)position, minutes);
+  uint8_t cmd[20];
+  memset(cmd, 0x76, 20);  // 'v' = AdvancedSettings
+  cmd[13] = 'P';  // 0x50
+  cmd[14] = position;  // Position value (49-56 for '1'-'8')
+  cmd[15] = (minutes > 99) ? 99 : minutes;
+  this->write_command(cmd, 20);
+}
+
+void CulliganWaterSoftener::send_set_low_salt_alert(uint8_t threshold) {
+  ESP_LOGI(TAG, "Setting low salt alert threshold to %d", threshold);
+  // This uses the brine tank command with current values except for alert threshold
+  uint8_t cmd[20];
+  memset(cmd, 0x75, 20);  // 'u' = Dashboard
+  cmd[13] = 'S';  // 0x53
+  cmd[14] = this->brine_regens_remaining_;
+  cmd[15] = (threshold > 100) ? 100 : threshold;
+  cmd[16] = this->brine_tank_type_;
+  cmd[17] = this->brine_fill_height_;
+  this->write_command(cmd, 20);
+}
+
 // ============================================================================
 // Helper Methods
 // ============================================================================
@@ -1281,6 +1335,50 @@ void ReserveCapacityNumber::control(float value) {
 
 void SaltLevelNumber::control(float value) {
   this->parent_->send_set_salt_level(value);
+  this->publish_state(value);
+}
+
+void RegenDaysNumber::control(float value) {
+  this->parent_->send_set_regen_days((uint8_t)value);
+  this->publish_state(value);
+}
+
+void ResinCapacityNumber::control(float value) {
+  // Value is in thousands of grains (e.g., 32 = 32,000 grains)
+  this->parent_->send_set_resin_capacity((uint16_t)value);
+  this->publish_state(value);
+}
+
+void PrefillDurationNumber::control(float value) {
+  // 0 = disabled, 1-4 = duration in hours
+  bool enable = (value > 0);
+  uint8_t hours = enable ? (uint8_t)value : 1;
+  this->parent_->send_set_prefill(enable, hours);
+  this->publish_state(value);
+}
+
+void BackwashTimeNumber::control(float value) {
+  this->parent_->send_set_cycle_time(49, (uint8_t)value);  // Position '1'
+  this->publish_state(value);
+}
+
+void BrineDrawTimeNumber::control(float value) {
+  this->parent_->send_set_cycle_time(50, (uint8_t)value);  // Position '2'
+  this->publish_state(value);
+}
+
+void RapidRinseTimeNumber::control(float value) {
+  this->parent_->send_set_cycle_time(51, (uint8_t)value);  // Position '3'
+  this->publish_state(value);
+}
+
+void BrineRefillTimeNumber::control(float value) {
+  this->parent_->send_set_cycle_time(52, (uint8_t)value);  // Position '4'
+  this->publish_state(value);
+}
+
+void LowSaltAlertNumber::control(float value) {
+  this->parent_->send_set_low_salt_alert((uint8_t)value);
   this->publish_state(value);
 }
 

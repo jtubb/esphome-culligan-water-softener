@@ -312,3 +312,27 @@ number:
     salt_level:
       name: "${friendly_name} Set Salt Level"
       id: set_salt_level
+    regen_days:
+      name: "${friendly_name} Set Regen Days"
+      id: set_regen_days
+    resin_capacity:
+      name: "${friendly_name} Set Resin Capacity"
+      id: set_resin_capacity
+    prefill_duration:
+      name: "${friendly_name} Set Prefill Duration"
+      id: set_prefill_duration
+    backwash_time:
+      name: "${friendly_name} Set Backwash Time"
+      id: set_backwash_time
+    brine_draw_time:
+      name: "${friendly_name} Set Brine Draw Time"
+      id: set_brine_draw_time
+    rapid_rinse_time:
+      name: "${friendly_name} Set Rapid Rinse Time"
+      id: set_rapid_rinse_time
+    brine_refill_time:
+      name: "${friendly_name} Set Brine Refill Time"
+      id: set_brine_refill_time
+    low_salt_alert:
+      name: "${friendly_name} Set Low Salt Alert"
+      id: set_low_salt_alert

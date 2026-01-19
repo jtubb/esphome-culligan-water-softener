@@ -163,6 +163,46 @@ class SaltLevelNumber : public number::Number, public Parented<CulliganWaterSoft
   void control(float value) override;
 };
 
+class RegenDaysNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
+class ResinCapacityNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
+class PrefillDurationNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
+class BackwashTimeNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
+class BrineDrawTimeNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
+class RapidRinseTimeNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
+class BrineRefillTimeNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
+class LowSaltAlertNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
 /**
  * Main component class for Culligan Water Softener
  */
@@ -246,6 +286,14 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   void set_regen_time_hour_number(RegenTimeHourNumber *num) { regen_time_hour_number_ = num; }
   void set_reserve_capacity_number(ReserveCapacityNumber *num) { reserve_capacity_number_ = num; }
   void set_salt_level_number(SaltLevelNumber *num) { salt_level_number_ = num; }
+  void set_regen_days_number(RegenDaysNumber *num) { regen_days_number_ = num; }
+  void set_resin_capacity_number(ResinCapacityNumber *num) { resin_capacity_number_ = num; }
+  void set_prefill_duration_number(PrefillDurationNumber *num) { prefill_duration_number_ = num; }
+  void set_backwash_time_number(BackwashTimeNumber *num) { backwash_time_number_ = num; }
+  void set_brine_draw_time_number(BrineDrawTimeNumber *num) { brine_draw_time_number_ = num; }
+  void set_rapid_rinse_time_number(RapidRinseTimeNumber *num) { rapid_rinse_time_number_ = num; }
+  void set_brine_refill_time_number(BrineRefillTimeNumber *num) { brine_refill_time_number_ = num; }
+  void set_low_salt_alert_number(LowSaltAlertNumber *num) { low_salt_alert_number_ = num; }
 
   // Write command methods (for buttons/switches/numbers)
   void send_regen_now();
@@ -258,6 +306,11 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   void send_set_regen_time(uint8_t hour, bool is_pm);
   void send_set_reserve_capacity(uint8_t percent);
   void send_set_salt_level(float lbs);
+  void send_set_regen_days(uint8_t days);
+  void send_set_resin_capacity(uint16_t grains_thousands);
+  void send_set_prefill(bool enable, uint8_t duration_hours);
+  void send_set_cycle_time(uint8_t position, uint8_t minutes);
+  void send_set_low_salt_alert(uint8_t threshold);
 
   // Request data from device
   void request_data();
@@ -380,6 +433,14 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   RegenTimeHourNumber *regen_time_hour_number_{nullptr};
   ReserveCapacityNumber *reserve_capacity_number_{nullptr};
   SaltLevelNumber *salt_level_number_{nullptr};
+  RegenDaysNumber *regen_days_number_{nullptr};
+  ResinCapacityNumber *resin_capacity_number_{nullptr};
+  PrefillDurationNumber *prefill_duration_number_{nullptr};
+  BackwashTimeNumber *backwash_time_number_{nullptr};
+  BrineDrawTimeNumber *brine_draw_time_number_{nullptr};
+  RapidRinseTimeNumber *rapid_rinse_time_number_{nullptr};
+  BrineRefillTimeNumber *brine_refill_time_number_{nullptr};
+  LowSaltAlertNumber *low_salt_alert_number_{nullptr};
 
   // Protocol parsing methods
   void handle_notification(const uint8_t *data, uint16_t length);
