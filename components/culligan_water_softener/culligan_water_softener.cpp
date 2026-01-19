@@ -189,8 +189,16 @@ void CulliganWaterSoftener::process_buffer() {
     this->parse_statistics_packet();
   } else if (type0 == 0x78 && type1 == 0x78) {  // "xx" - Keepalive
     // Silently consume keepalive packets - they're just connection maintenance
-    // Keepalive packets vary in size (4-6 bytes typically)
-    size_t packet_len = (this->buffer_.size() >= 6) ? 6 : this->buffer_.size();
+    // xx-0 is 6 bytes: 78 78 00 00 10 00
+    // xx-1 through xx-6 are 4 bytes: 78 78 0X 00
+    if (this->buffer_.size() < 4) {
+      return;  // Wait for complete packet
+    }
+    uint8_t packet_num = this->buffer_[2];
+    size_t packet_len = (packet_num == 0) ? 6 : 4;
+    if (this->buffer_.size() < packet_len) {
+      return;  // Wait for complete packet
+    }
     this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + packet_len);
   } else {
     // Unknown packet type - scan for next valid header instead of discarding one byte at a time
