@@ -140,14 +140,13 @@ void CulliganWaterSoftener::gattc_event_handler(esp_gattc_cb_event_t event, esp_
 }
 
 void CulliganWaterSoftener::handle_notification(const uint8_t *data, uint16_t length) {
-  // Log raw notification data for debugging
-  if (length <= 20) {
-    char hex_str[61];
-    for (uint16_t i = 0; i < length; i++) {
-      snprintf(hex_str + i * 3, 4, "%02X ", data[i]);
-    }
-    ESP_LOGD(TAG, "Notification (%d bytes): %s", length, hex_str);
+  // Log raw notification data for debugging (always log at INFO level for troubleshooting)
+  char hex_str[61];
+  size_t log_len = (length > 20) ? 20 : length;
+  for (size_t i = 0; i < log_len; i++) {
+    snprintf(hex_str + i * 3, 4, "%02X ", data[i]);
   }
+  ESP_LOGI(TAG, "RX (%d bytes): %s", length, hex_str);
 
   // Add data to buffer
   for (uint16_t i = 0; i < length; i++) {
@@ -156,36 +155,70 @@ void CulliganWaterSoftener::handle_notification(const uint8_t *data, uint16_t le
 
   ESP_LOGD(TAG, "Buffer size: %d bytes", this->buffer_.size());
 
-  // Try to parse packet
-  if (this->buffer_.size() >= 2) {
-    this->parse_packet();
+  // Try to parse complete packets from buffer
+  this->process_buffer();
+}
+
+void CulliganWaterSoftener::process_buffer() {
+  // Keep processing while we have potential packets
+  while (this->buffer_.size() >= 20) {
+    uint8_t type0 = this->buffer_[0];
+    uint8_t type1 = this->buffer_[1];
+
+    bool packet_parsed = false;
+
+    if (type0 == 0x74 && type1 == 0x74) {  // "tt" - Handshake
+      this->parse_handshake();
+      packet_parsed = true;
+    } else if (type0 == 0x75 && type1 == 0x75) {  // "uu" - Status
+      this->parse_status_packet();
+      packet_parsed = true;
+    } else if (type0 == 0x76 && type1 == 0x76) {  // "vv" - Settings
+      this->parse_settings_packet();
+      packet_parsed = true;
+    } else if (type0 == 0x77 && type1 == 0x77) {  // "ww" - Statistics
+      this->parse_statistics_packet();
+      packet_parsed = true;
+    } else if (type0 == 0x78 && type1 == 0x78) {  // "xx" - Keepalive
+      ESP_LOGD(TAG, "Keepalive packet received");
+      this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
+      packet_parsed = true;
+    }
+
+    if (!packet_parsed) {
+      // Unknown packet type - try to find a valid header by scanning forward
+      ESP_LOGW(TAG, "Unknown packet start: 0x%02X 0x%02X, scanning for valid header...", type0, type1);
+
+      // Look for a valid header in the buffer
+      bool found_header = false;
+      for (size_t i = 1; i < this->buffer_.size() - 1; i++) {
+        uint8_t b0 = this->buffer_[i];
+        uint8_t b1 = this->buffer_[i + 1];
+        if ((b0 == 0x74 && b1 == 0x74) ||  // tt
+            (b0 == 0x75 && b1 == 0x75) ||  // uu
+            (b0 == 0x76 && b1 == 0x76) ||  // vv
+            (b0 == 0x77 && b1 == 0x77) ||  // ww
+            (b0 == 0x78 && b1 == 0x78)) {  // xx
+          ESP_LOGW(TAG, "Found valid header at offset %d, discarding %d bytes", i, i);
+          this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + i);
+          found_header = true;
+          break;
+        }
+      }
+
+      if (!found_header) {
+        // No valid header found, discard one byte and try again
+        ESP_LOGW(TAG, "No valid header found, discarding buffer");
+        this->buffer_.clear();
+        break;
+      }
+    }
   }
 }
 
-void CulliganWaterSoftener::parse_packet() {
-  // Check packet type (first 2 bytes)
-  uint8_t type0 = this->buffer_[0];
-  uint8_t type1 = this->buffer_[1];
-
-  if (type0 == 0x74 && type1 == 0x74) {  // "tt" - Handshake
-    this->parse_handshake();
-  } else if (type0 == 0x75 && type1 == 0x75) {  // "uu" - Status
-    this->parse_status_packet();
-  } else if (type0 == 0x76 && type1 == 0x76) {  // "vv" - Settings
-    this->parse_settings_packet();
-  } else if (type0 == 0x77 && type1 == 0x77) {  // "ww" - Statistics
-    this->parse_statistics_packet();
-  } else if (type0 == 0x78 && type1 == 0x78) {  // "xx" - Keepalive
-    ESP_LOGD(TAG, "Keepalive packet received");
-    this->buffer_.clear();
-  } else {
-    ESP_LOGW(TAG, "Unknown packet type: 0x%02X 0x%02X", type0, type1);
-    this->buffer_.clear();
-  }
-}
 
 void CulliganWaterSoftener::parse_handshake() {
-  if (this->buffer_.size() < 18) {
+  if (this->buffer_.size() < 20) {
     ESP_LOGD(TAG, "Handshake packet incomplete, waiting for more data");
     return;
   }
@@ -208,15 +241,23 @@ void CulliganWaterSoftener::parse_handshake() {
   char fw_version[16];
   snprintf(fw_version, sizeof(fw_version), "C%d.%d", this->firmware_major_, this->firmware_minor_);
 
-  ESP_LOGI(TAG, "Handshake received, firmware: %s, auth flag: 0x%02X, counter: %d, will auth: %s",
-           fw_version, auth_flag, this->connection_counter_, this->auth_required_ ? "yes" : "no");
+  ESP_LOGI(TAG, "Handshake received, firmware: %s, auth flag: 0x%02X, counter: %d, already_auth: %s",
+           fw_version, auth_flag, this->connection_counter_, this->authenticated_ ? "yes" : "no");
 
   if (this->firmware_version_sensor_ != nullptr) {
     this->firmware_version_sensor_->publish_state(fw_version);
   }
 
   this->handshake_received_ = true;
-  this->buffer_.clear();
+
+  // Remove the handshake packet from buffer (20 bytes)
+  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
+
+  // Only authenticate if we haven't already for this connection
+  if (this->authenticated_) {
+    ESP_LOGI(TAG, "Already authenticated, ignoring handshake");
+    return;
+  }
 
   // Send authentication if required (firmware < 6.0)
   if (this->auth_required_) {
@@ -368,7 +409,8 @@ void CulliganWaterSoftener::parse_status_packet() {
              regen_active, tank_type, regens_remaining);
   }
 
-  this->buffer_.clear();
+  // Remove the parsed packet from buffer (20 bytes)
+  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
   this->status_packet_count_++;
 }
 
@@ -474,7 +516,8 @@ void CulliganWaterSoftener::parse_settings_packet() {
              brine_refill_time, (brine_refill_raw & 0x80) ? " (fixed)" : "");
   }
 
-  this->buffer_.clear();
+  // Remove the parsed packet from buffer (20 bytes)
+  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
 }
 
 void CulliganWaterSoftener::parse_statistics_packet() {
@@ -523,7 +566,8 @@ void CulliganWaterSoftener::parse_statistics_packet() {
              current_flow, total_gallons, total_regens);
   }
 
-  this->buffer_.clear();
+  // Remove the parsed packet from buffer (20 bytes)
+  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
 }
 
 // ============================================================================

@@ -326,7 +326,7 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
 
   // Protocol parsing methods
   void handle_notification(const uint8_t *data, uint16_t length);
-  void parse_packet();
+  void process_buffer();
   void parse_handshake();
   void parse_status_packet();
   void parse_settings_packet();
