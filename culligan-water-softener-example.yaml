@@ -1,0 +1,207 @@
+# Example ESPHome configuration for Culligan Water Softener BLE Integration
+#
+# Replace 'esphome-btproxy-466108' with your ESP32 device name
+# Replace the MAC address with your water softener's address
+
+substitutions:
+  device_name: esphome-btproxy-466108
+  friendly_name: "ESPHome BT Proxy"
+  water_softener_mac: "E8:3B:AA:91:CD:68"  # Your CS_Meter_Soft MAC address
+
+esphome:
+  name: ${device_name}
+  platform: ESP32
+  board: esp32dev
+
+# Enable logging
+logger:
+  level: DEBUG
+  logs:
+    culligan_water_softener: DEBUG
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot in case wifi connection fails
+  ap:
+    ssid: "${device_name} Fallback"
+    password: !secret fallback_password
+
+# Enable Bluetooth proxy (keep existing functionality)
+bluetooth_proxy:
+  active: true
+  cache_services: true
+
+# BLE client for water softener
+ble_client:
+  - mac_address: ${water_softener_mac}
+    id: culligan_ble_client
+
+# External component - use local path for development or GitHub for production
+external_components:
+  # For local development:
+  - source:
+      type: local
+      path: components
+    components: [ culligan_water_softener ]
+
+  # For GitHub deployment (uncomment when ready):
+  # - source:
+  #     type: git
+  #     url: https://github.com/YOUR_USERNAME/esphome-culligan-water-softener
+  #   components: [ culligan_water_softener ]
+
+# Water softener component
+culligan_water_softener:
+  id: water_softener
+  ble_client_id: culligan_ble_client
+  password: 1234  # Default password, change if different
+  poll_interval: 60s  # How often to request data from device
+
+# Sensors
+sensor:
+  - platform: culligan_water_softener
+    culligan_water_softener_id: water_softener
+    current_flow:
+      name: "${friendly_name} Current Flow"
+      id: current_flow
+    soft_water_remaining:
+      name: "${friendly_name} Soft Water Remaining"
+      id: soft_water_remaining
+    water_usage_today:
+      name: "${friendly_name} Water Usage Today"
+      id: water_usage_today
+    peak_flow_today:
+      name: "${friendly_name} Peak Flow Today"
+      id: peak_flow_today
+    water_hardness:
+      name: "${friendly_name} Water Hardness"
+      id: water_hardness
+    brine_level:
+      name: "${friendly_name} Salt Level"
+      id: brine_level
+    avg_daily_usage:
+      name: "${friendly_name} Average Daily Usage"
+      id: avg_daily_usage
+    days_until_regen:
+      name: "${friendly_name} Days Until Regeneration"
+      id: days_until_regen
+    total_gallons:
+      name: "${friendly_name} Total Gallons Treated"
+      id: total_gallons
+    total_regenerations:
+      name: "${friendly_name} Total Regenerations"
+      id: total_regenerations
+    battery_level:
+      name: "${friendly_name} Battery"
+      id: battery_level
+    # Settings sensors
+    reserve_capacity:
+      name: "${friendly_name} Reserve Capacity"
+      id: reserve_capacity
+    resin_capacity:
+      name: "${friendly_name} Resin Capacity"
+      id: resin_capacity
+    # Cycle time sensors (optional)
+    backwash_time:
+      name: "${friendly_name} Backwash Time"
+      id: backwash_time
+    brine_draw_time:
+      name: "${friendly_name} Brine Draw Time"
+      id: brine_draw_time
+    rapid_rinse_time:
+      name: "${friendly_name} Rapid Rinse Time"
+      id: rapid_rinse_time
+    brine_refill_time:
+      name: "${friendly_name} Brine Refill Time"
+      id: brine_refill_time
+
+# Text sensors
+text_sensor:
+  - platform: culligan_water_softener
+    culligan_water_softener_id: water_softener
+    firmware_version:
+      name: "${friendly_name} Firmware Version"
+      id: firmware_version
+    device_time:
+      name: "${friendly_name} Device Time"
+      id: device_time
+    regeneration_time:
+      name: "${friendly_name} Regeneration Time"
+      id: regen_time
+
+# Binary sensors (status flags)
+binary_sensor:
+  - platform: culligan_water_softener
+    culligan_water_softener_id: water_softener
+    display_off:
+      name: "${friendly_name} Display Off"
+      id: display_off
+    bypass_active:
+      name: "${friendly_name} Bypass Active"
+      id: bypass_active
+    shutoff_active:
+      name: "${friendly_name} Shutoff Active"
+      id: shutoff_active
+    regeneration_active:
+      name: "${friendly_name} Regenerating"
+      id: regen_active
+
+# Buttons (commands)
+button:
+  - platform: culligan_water_softener
+    culligan_water_softener_id: water_softener
+    regenerate_now:
+      name: "${friendly_name} Regenerate Now"
+      id: regen_now_btn
+    regenerate_next:
+      name: "${friendly_name} Regenerate Next Scheduled"
+      id: regen_next_btn
+    sync_time:
+      name: "${friendly_name} Sync Time"
+      id: sync_time_btn
+    reset_gallons:
+      name: "${friendly_name} Reset Gallons Counter"
+      id: reset_gallons_btn
+    reset_regenerations:
+      name: "${friendly_name} Reset Regenerations Counter"
+      id: reset_regens_btn
+
+# Switches (toggles)
+switch:
+  - platform: culligan_water_softener
+    culligan_water_softener_id: water_softener
+    display:
+      name: "${friendly_name} Display"
+      id: display_switch
+
+# Numbers (adjustable settings)
+number:
+  - platform: culligan_water_softener
+    culligan_water_softener_id: water_softener
+    water_hardness:
+      name: "${friendly_name} Set Water Hardness"
+      id: set_hardness
+    regeneration_time_hour:
+      name: "${friendly_name} Set Regen Hour"
+      id: set_regen_hour
+    reserve_capacity:
+      name: "${friendly_name} Set Reserve Capacity"
+      id: set_reserve
+    salt_level:
+      name: "${friendly_name} Set Salt Level"
+      id: set_salt_level
+
+# WiFi signal sensor (useful for monitoring)
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi Signal"
+    update_interval: 60s
