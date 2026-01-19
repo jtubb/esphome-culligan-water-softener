@@ -243,6 +243,9 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   // Request data from device
   void request_data();
 
+  // Send keepalive to maintain connection
+  void send_keepalive();
+
  protected:
   // BLE characteristic handles
   uint16_t tx_handle_{0};
@@ -273,6 +276,8 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   uint16_t password_{DEFAULT_PASSWORD};
   uint32_t poll_interval_ms_{60000};  // Default 60 seconds
   uint32_t last_poll_time_{0};
+  uint32_t last_keepalive_time_{0};
+  static const uint32_t KEEPALIVE_INTERVAL_MS = 3000;  // Send keepalive every 3 seconds
 
   // Sensor pointers
   sensor::Sensor *current_flow_sensor_{nullptr};

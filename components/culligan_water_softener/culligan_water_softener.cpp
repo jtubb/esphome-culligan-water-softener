@@ -36,8 +36,15 @@ void CulliganWaterSoftener::setup() {
 }
 
 void CulliganWaterSoftener::loop() {
-  // Periodic data request
   uint32_t now = millis();
+
+  // Send keepalive to maintain connection (every 3 seconds)
+  if (this->authenticated_ && (now - this->last_keepalive_time_ >= KEEPALIVE_INTERVAL_MS)) {
+    this->last_keepalive_time_ = now;
+    this->send_keepalive();
+  }
+
+  // Periodic data request (at poll_interval)
   if (this->authenticated_ && (now - this->last_poll_time_ >= this->poll_interval_ms_)) {
     this->last_poll_time_ = now;
     this->request_data();
@@ -600,7 +607,9 @@ void CulliganWaterSoftener::send_authentication() {
   // The device needs time to process authentication
   delay(200);
   this->authenticated_ = true;
-  this->last_poll_time_ = millis();  // Reset poll timer so we don't immediately poll again
+  uint32_t now = millis();
+  this->last_poll_time_ = now;       // Reset poll timer so we don't immediately poll again
+  this->last_keepalive_time_ = now;  // Reset keepalive timer
   this->request_data();
 }
 
@@ -684,6 +693,15 @@ void CulliganWaterSoftener::write_command(const uint8_t *data, size_t length) {
   } else {
     ESP_LOGD(TAG, "Write command sent, %d bytes", length);
   }
+}
+
+void CulliganWaterSoftener::send_keepalive() {
+  // Send keepalive packet to maintain BLE connection
+  // The device disconnects after ~5 seconds of inactivity
+  uint8_t keepalive[20];
+  memset(keepalive, 0x78, 20);  // 'x' - keepalive packet
+  this->write_command(keepalive, 20);
+  ESP_LOGD(TAG, "Sent keepalive");
 }
 
 void CulliganWaterSoftener::request_data() {
