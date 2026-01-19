@@ -363,6 +363,15 @@ void CulliganWaterSoftener::parse_status_packet() {
       this->regen_time_sensor_->publish_state(this->format_time_12h(regen_hour, 0, regen_am_pm));
     }
 
+    // Update number entities with current device values
+    if (this->hardness_number_ != nullptr) {
+      this->hardness_number_->publish_state(hardness);
+    }
+
+    if (this->regen_time_hour_number_ != nullptr) {
+      this->regen_time_hour_number_->publish_state(regen_hour);
+    }
+
     ESP_LOGI(TAG, "Parsed uu-0: Time=%d:%02d %s, Flow=%.2f GPM, Soft Water=%d gal, Usage=%d gal",
              hour, minute, am_pm ? "PM" : "AM", current_flow, soft_water, usage_today);
 
@@ -401,15 +410,19 @@ void CulliganWaterSoftener::parse_status_packet() {
     this->brine_tank_configured_ = (regens_remaining != 0xFF);
 
     // Calculate and publish brine level if configured
-    if (this->brine_level_sensor_ != nullptr) {
-      if (this->brine_tank_configured_) {
-        float salt_remaining = this->calculate_salt_remaining();
+    if (this->brine_tank_configured_) {
+      float salt_remaining = this->calculate_salt_remaining();
+      if (this->brine_level_sensor_ != nullptr) {
         this->brine_level_sensor_->publish_state(salt_remaining);
-        ESP_LOGD(TAG, "Salt remaining: %.1f lbs (tank=%d\", height=%d\", refill=%d min, regens=%d)",
-                 salt_remaining, tank_type, fill_height, refill_time, regens_remaining);
-      } else {
-        ESP_LOGD(TAG, "Brine tank not configured");
       }
+      // Update salt level number entity with current value
+      if (this->salt_level_number_ != nullptr) {
+        this->salt_level_number_->publish_state(salt_remaining);
+      }
+      ESP_LOGD(TAG, "Salt remaining: %.1f lbs (tank=%d\", height=%d\", refill=%d min, regens=%d)",
+               salt_remaining, tank_type, fill_height, refill_time, regens_remaining);
+    } else {
+      ESP_LOGD(TAG, "Brine tank not configured");
     }
 
     ESP_LOGI(TAG, "Parsed uu-1: Regen active=%d, Salt=%.1f lbs",
@@ -467,6 +480,11 @@ void CulliganWaterSoftener::parse_settings_packet() {
 
     if (this->reserve_capacity_sensor_ != nullptr) {
       this->reserve_capacity_sensor_->publish_state(reserve_capacity);
+    }
+
+    // Update reserve capacity number entity with current value
+    if (this->reserve_capacity_number_ != nullptr) {
+      this->reserve_capacity_number_->publish_state(reserve_capacity);
     }
 
     if (this->resin_capacity_sensor_ != nullptr) {
