@@ -870,14 +870,15 @@ void CulliganWaterSoftener::send_set_reserve_capacity(uint8_t percent) {
 
 void CulliganWaterSoftener::send_set_salt_level(float lbs) {
   // Calculate regens remaining from pounds
+  // Use rounding (add 0.5) instead of truncation for better accuracy
   float salt_per_regen = this->brine_refill_time_ * 1.5f;
   uint8_t regens = 0;
   if (salt_per_regen > 0) {
-    regens = (uint8_t)(lbs / salt_per_regen);
+    regens = (uint8_t)((lbs / salt_per_regen) + 0.5f);  // Round to nearest
     if (regens > 100) regens = 100;
   }
 
-  ESP_LOGI(TAG, "Setting salt level to %.1f lbs (%d regens)", lbs, regens);
+  ESP_LOGI(TAG, "Setting salt level to %.1f lbs (%d regens, %.1f lbs/regen)", lbs, regens, salt_per_regen);
 
   uint8_t cmd[20];
   memset(cmd, 0x75, 20);  // 'u' base
