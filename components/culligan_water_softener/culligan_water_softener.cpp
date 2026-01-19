@@ -38,8 +38,8 @@ void CulliganWaterSoftener::setup() {
 void CulliganWaterSoftener::loop() {
   uint32_t now = millis();
 
-  // Send keepalive to maintain connection (every 3 seconds)
-  if (this->authenticated_ && (now - this->last_keepalive_time_ >= KEEPALIVE_INTERVAL_MS)) {
+  // Send keepalive to maintain connection (every 4 seconds)
+  if (this->authenticated_ && (now - this->last_keepalive_time_ >= this->keepalive_interval_ms_)) {
     this->last_keepalive_time_ = now;
     this->send_keepalive();
   }
