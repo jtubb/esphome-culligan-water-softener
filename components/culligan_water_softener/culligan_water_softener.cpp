@@ -161,7 +161,8 @@ void CulliganWaterSoftener::handle_notification(const uint8_t *data, uint16_t le
 
 void CulliganWaterSoftener::process_buffer() {
   // Keep processing while we have potential packets
-  while (this->buffer_.size() >= 20) {
+  // Note: Handshake packets can be 18 bytes, data packets are 20 bytes
+  while (this->buffer_.size() >= 18) {
     uint8_t type0 = this->buffer_[0];
     uint8_t type1 = this->buffer_[1];
 
@@ -218,7 +219,8 @@ void CulliganWaterSoftener::process_buffer() {
 
 
 void CulliganWaterSoftener::parse_handshake() {
-  if (this->buffer_.size() < 20) {
+  // Handshake packets are 18 bytes (not 20 like data packets)
+  if (this->buffer_.size() < 18) {
     ESP_LOGD(TAG, "Handshake packet incomplete, waiting for more data");
     return;
   }
@@ -250,8 +252,8 @@ void CulliganWaterSoftener::parse_handshake() {
 
   this->handshake_received_ = true;
 
-  // Remove the handshake packet from buffer (20 bytes)
-  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
+  // Remove the handshake packet from buffer (18 bytes)
+  this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 18);
 
   // Only authenticate if we haven't already for this connection
   if (this->authenticated_) {
