@@ -183,9 +183,35 @@ void CulliganWaterSoftener::process_buffer() {
     size_t packet_len = (this->buffer_.size() >= 20) ? 20 : this->buffer_.size();
     this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + packet_len);
   } else {
-    // Unknown packet type - discard first byte and try again next time
-    ESP_LOGW(TAG, "Unknown packet start: 0x%02X 0x%02X, discarding byte", type0, type1);
-    this->buffer_.erase(this->buffer_.begin());
+    // Unknown packet type - scan for next valid header instead of discarding one byte at a time
+    // This handles headerless continuation packets (uu-3,4,5) more efficiently
+    ESP_LOGD(TAG, "Unknown packet start: 0x%02X 0x%02X, scanning for next valid header", type0, type1);
+
+    // Look for next valid header in buffer
+    size_t scan_pos = 1;
+    bool found = false;
+    while (scan_pos < this->buffer_.size() - 1) {
+      uint8_t b0 = this->buffer_[scan_pos];
+      uint8_t b1 = this->buffer_[scan_pos + 1];
+      if ((b0 == 0x74 && b1 == 0x74) ||  // tt
+          (b0 == 0x75 && b1 == 0x75) ||  // uu
+          (b0 == 0x76 && b1 == 0x76) ||  // vv
+          (b0 == 0x77 && b1 == 0x77) ||  // ww
+          (b0 == 0x78 && b1 == 0x78)) {  // xx
+        // Found a valid header, skip to it
+        ESP_LOGD(TAG, "Found valid header at offset %d, discarding %d bytes", scan_pos, scan_pos);
+        this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + scan_pos);
+        found = true;
+        break;
+      }
+      scan_pos++;
+    }
+
+    if (!found) {
+      // No valid header found, clear buffer (likely headerless continuation data)
+      ESP_LOGD(TAG, "No valid header found, clearing %d bytes of headerless data", this->buffer_.size());
+      this->buffer_.clear();
+    }
   }
 }
 
@@ -381,6 +407,15 @@ void CulliganWaterSoftener::parse_status_packet() {
 
     ESP_LOGI(TAG, "Parsed uu-1: Regen active=%d, Salt=%.1f lbs",
              regen_active, this->brine_tank_configured_ ? this->calculate_salt_remaining() : 0.0f);
+  } else if (packet_num >= 2) {
+    // uu-2 through uu-5: Historical data packets
+    // We don't need this data, and uu-3,4,5 arrive WITHOUT headers (continuation packets)
+    // Clear the entire buffer after uu-2 to avoid buffer corruption from headerless packets
+    ESP_LOGD(TAG, "Status packet #%d (historical), clearing buffer to skip headerless continuations", packet_num);
+    this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + 20);
+    this->buffer_.clear();  // Clear remaining buffer to skip uu-3,4,5 headerless data
+    this->status_packet_count_++;
+    return;
   }
 
   // Remove the parsed packet from buffer (20 bytes)
