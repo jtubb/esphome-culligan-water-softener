@@ -507,6 +507,9 @@ void CulliganWaterSoftener::parse_status_packet() {
     if (this->low_salt_alert_sensor_ != nullptr) {
       this->low_salt_alert_sensor_->publish_state(low_salt_alert);
     }
+    if (this->low_salt_alert_number_ != nullptr) {
+      this->low_salt_alert_number_->publish_state(low_salt_alert);
+    }
 
     // Calculate and publish brine level if configured
     if (this->brine_tank_configured_) {
@@ -607,6 +610,10 @@ void CulliganWaterSoftener::parse_settings_packet() {
     if (this->regen_day_override_sensor_ != nullptr) {
       this->regen_day_override_sensor_->publish_state(regen_day_override);
     }
+    // Update regen days number entity with current value
+    if (this->regen_days_number_ != nullptr) {
+      this->regen_days_number_->publish_state(regen_day_override);
+    }
 
     if (this->reserve_capacity_sensor_ != nullptr) {
       this->reserve_capacity_sensor_->publish_state(reserve_capacity);
@@ -619,6 +626,10 @@ void CulliganWaterSoftener::parse_settings_packet() {
 
     if (this->resin_capacity_sensor_ != nullptr) {
       this->resin_capacity_sensor_->publish_state(resin_capacity);
+    }
+    // Update resin capacity number entity (in thousands of grains for setting)
+    if (this->resin_capacity_number_ != nullptr) {
+      this->resin_capacity_number_->publish_state(resin_raw);  // Raw value in thousands
     }
 
     if (this->air_recharge_frequency_sensor_ != nullptr) {
@@ -635,6 +646,10 @@ void CulliganWaterSoftener::parse_settings_packet() {
 
     if (this->soak_duration_sensor_ != nullptr) {
       this->soak_duration_sensor_->publish_state(soak_duration);
+    }
+    // Update prefill duration number entity (0 = disabled, 1-4 = hours)
+    if (this->prefill_duration_number_ != nullptr) {
+      this->prefill_duration_number_->publish_state(prefill_enabled ? soak_duration : 0);
     }
 
     // Publish binary sensors for rental/prefill settings
@@ -694,17 +709,29 @@ void CulliganWaterSoftener::parse_settings_packet() {
     if (this->backwash_time_sensor_ != nullptr) {
       this->backwash_time_sensor_->publish_state(backwash_time);
     }
+    if (this->backwash_time_number_ != nullptr) {
+      this->backwash_time_number_->publish_state(backwash_time);
+    }
 
     if (this->brine_draw_time_sensor_ != nullptr) {
       this->brine_draw_time_sensor_->publish_state(brine_draw_time);
+    }
+    if (this->brine_draw_time_number_ != nullptr) {
+      this->brine_draw_time_number_->publish_state(brine_draw_time);
     }
 
     if (this->rapid_rinse_time_sensor_ != nullptr) {
       this->rapid_rinse_time_sensor_->publish_state(rapid_rinse_time);
     }
+    if (this->rapid_rinse_time_number_ != nullptr) {
+      this->rapid_rinse_time_number_->publish_state(rapid_rinse_time);
+    }
 
     if (this->brine_refill_time_sensor_ != nullptr) {
       this->brine_refill_time_sensor_->publish_state(brine_refill_time);
+    }
+    if (this->brine_refill_time_number_ != nullptr) {
+      this->brine_refill_time_number_->publish_state(brine_refill_time);
     }
 
     // Publish cycle positions 5-8
