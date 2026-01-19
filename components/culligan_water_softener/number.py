@@ -2,6 +2,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import number
+from esphome.components.number import NumberMode
 from esphome.const import (
     CONF_ID,
     CONF_MODE,
@@ -66,6 +67,7 @@ async def to_code(config):
             max_value=99,
             step=1,
         )
+        cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_hardness_number(num))
 
@@ -76,6 +78,7 @@ async def to_code(config):
             max_value=12,
             step=1,
         )
+        cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_regen_time_hour_number(num))
 
@@ -86,6 +89,7 @@ async def to_code(config):
             max_value=49,
             step=1,
         )
+        cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_reserve_capacity_number(num))
 
@@ -96,5 +100,6 @@ async def to_code(config):
             max_value=500,  # Max based on largest tank size
             step=1,
         )
+        cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_salt_level_number(num))
