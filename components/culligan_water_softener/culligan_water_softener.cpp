@@ -627,9 +627,9 @@ void CulliganWaterSoftener::parse_settings_packet() {
     if (this->resin_capacity_sensor_ != nullptr) {
       this->resin_capacity_sensor_->publish_state(resin_capacity);
     }
-    // Update resin capacity number entity (full grain value)
+    // Update resin capacity number entity (in thousands, e.g., 32 = 32,000 grains)
     if (this->resin_capacity_number_ != nullptr) {
-      this->resin_capacity_number_->publish_state(resin_capacity);  // Full value in grains
+      this->resin_capacity_number_->publish_state(resin_raw);
     }
 
     if (this->air_recharge_frequency_sensor_ != nullptr) {
@@ -1371,9 +1371,8 @@ void RegenDaysNumber::control(float value) {
 }
 
 void ResinCapacityNumber::control(float value) {
-  // Value is in full grains (e.g., 32000), convert to thousands for device
-  uint16_t thousands = (uint16_t)(value / 1000);
-  this->parent_->send_set_resin_capacity(thousands);
+  // Value is in thousands of grains (e.g., 32 = 32,000 grains)
+  this->parent_->send_set_resin_capacity((uint16_t)value);
   this->publish_state(value);
 }
 
