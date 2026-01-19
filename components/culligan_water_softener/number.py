@@ -126,7 +126,6 @@ async def to_code(config):
             max_value=99,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_hardness_number(num))
@@ -138,7 +137,6 @@ async def to_code(config):
             max_value=12,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_regen_time_hour_number(num))
@@ -150,7 +148,6 @@ async def to_code(config):
             max_value=49,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_reserve_capacity_number(num))
@@ -162,7 +159,6 @@ async def to_code(config):
             max_value=500,  # Max based on largest tank size
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_salt_level_number(num))
@@ -174,7 +170,6 @@ async def to_code(config):
             max_value=29,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_regen_days_number(num))
@@ -186,7 +181,6 @@ async def to_code(config):
             max_value=399,  # Thousands of grains (0-399 = 0-399,000)
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_resin_capacity_number(num))
@@ -198,7 +192,6 @@ async def to_code(config):
             max_value=4,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_prefill_duration_number(num))
@@ -210,7 +203,6 @@ async def to_code(config):
             max_value=99,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_backwash_time_number(num))
@@ -222,7 +214,6 @@ async def to_code(config):
             max_value=99,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_brine_draw_time_number(num))
@@ -234,7 +225,6 @@ async def to_code(config):
             max_value=99,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_rapid_rinse_time_number(num))
@@ -246,7 +236,6 @@ async def to_code(config):
             max_value=99,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_brine_refill_time_number(num))
@@ -258,7 +247,6 @@ async def to_code(config):
             max_value=100,
             step=1,
         )
-        cg.add(num.set_accuracy_decimals(0))
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_low_salt_alert_number(num))
