@@ -448,7 +448,7 @@ void CulliganWaterSoftener::parse_settings_packet() {
     uint8_t days_until_regen = this->buffer_[3];
     uint8_t reserve_capacity = this->buffer_[5];
     uint16_t resin_raw = this->read_uint16_be(6);
-    uint32_t resin_capacity = resin_raw * 100;  // Scale to grains
+    uint32_t resin_capacity = resin_raw * 1000;  // Scale to grains (raw value is in thousands)
     uint8_t prefill_enabled = this->buffer_[8];
     uint8_t prefill_duration = this->buffer_[9];
     uint8_t soak_duration = this->buffer_[10];
