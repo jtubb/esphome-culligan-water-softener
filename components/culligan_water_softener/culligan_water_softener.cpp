@@ -147,20 +147,23 @@ void CulliganWaterSoftener::gattc_event_handler(esp_gattc_cb_event_t event, esp_
 }
 
 void CulliganWaterSoftener::handle_notification(const uint8_t *data, uint16_t length) {
-  // Log raw notification data for debugging (always log at INFO level for troubleshooting)
-  char hex_str[61];
-  size_t log_len = (length > 20) ? 20 : length;
-  for (size_t i = 0; i < log_len; i++) {
-    snprintf(hex_str + i * 3, 4, "%02X ", data[i]);
+  // Only log non-keepalive packets at INFO level to reduce noise
+  // Keepalive packets (0x78 0x78) are logged at VERBOSE level
+  bool is_keepalive = (length >= 2 && data[0] == 0x78 && data[1] == 0x78);
+
+  if (!is_keepalive) {
+    char hex_str[61];
+    size_t log_len = (length > 20) ? 20 : length;
+    for (size_t i = 0; i < log_len; i++) {
+      snprintf(hex_str + i * 3, 4, "%02X ", data[i]);
+    }
+    ESP_LOGD(TAG, "RX (%d bytes): %s", length, hex_str);
   }
-  ESP_LOGI(TAG, "RX (%d bytes): %s", length, hex_str);
 
   // Add data to buffer
   for (uint16_t i = 0; i < length; i++) {
     this->buffer_.push_back(data[i]);
   }
-
-  ESP_LOGD(TAG, "Buffer size: %d bytes", this->buffer_.size());
 
   // Try to parse complete packets from buffer
   this->process_buffer();
@@ -185,9 +188,9 @@ void CulliganWaterSoftener::process_buffer() {
   } else if (type0 == 0x77 && type1 == 0x77) {  // "ww" - Statistics
     this->parse_statistics_packet();
   } else if (type0 == 0x78 && type1 == 0x78) {  // "xx" - Keepalive
-    ESP_LOGD(TAG, "Keepalive packet received");
-    // Find end marker and remove packet
-    size_t packet_len = (this->buffer_.size() >= 20) ? 20 : this->buffer_.size();
+    // Silently consume keepalive packets - they're just connection maintenance
+    // Keepalive packets vary in size (4-6 bytes typically)
+    size_t packet_len = (this->buffer_.size() >= 6) ? 6 : this->buffer_.size();
     this->buffer_.erase(this->buffer_.begin(), this->buffer_.begin() + packet_len);
   } else {
     // Unknown packet type - scan for next valid header instead of discarding one byte at a time
@@ -719,7 +722,6 @@ void CulliganWaterSoftener::send_keepalive() {
   uint8_t keepalive[20];
   memset(keepalive, 0x78, 20);  // 'x' - keepalive packet
   this->write_command(keepalive, 20);
-  ESP_LOGD(TAG, "Sent keepalive");
 }
 
 void CulliganWaterSoftener::request_data() {
