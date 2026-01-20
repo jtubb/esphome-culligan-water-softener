@@ -65,7 +65,8 @@ bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &d
              name.c_str(), mac_str, device.get_rssi());
 
     // Update the BLE client's address to connect to this device
-    this->parent_->set_address(this->discovered_address_);
+    // Use explicit BLEClientNode::parent_ to disambiguate from ESPBTDeviceListener::parent_
+    this->ble_client::BLEClientNode::parent_->set_address(this->discovered_address_);
 
     ESP_LOGI(TAG, "BLE client address updated, will connect automatically");
 
@@ -179,7 +180,7 @@ void CulliganWaterSoftener::gattc_event_handler(esp_gattc_cb_event_t event, esp_
       auto service_uuid = esp32_ble_tracker::ESPBTUUID::from_raw("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
       auto tx_char_uuid = esp32_ble_tracker::ESPBTUUID::from_raw("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
 
-      auto *chr = this->parent_->get_characteristic(service_uuid, tx_char_uuid);
+      auto *chr = this->ble_client::BLEClientNode::parent_->get_characteristic(service_uuid, tx_char_uuid);
       if (chr == nullptr) {
         ESP_LOGE(TAG, "TX characteristic not found");
         break;
@@ -187,8 +188,8 @@ void CulliganWaterSoftener::gattc_event_handler(esp_gattc_cb_event_t event, esp_
       this->tx_handle_ = chr->handle;
 
       // Subscribe to notifications
-      auto status = esp_ble_gattc_register_for_notify(this->parent_->get_gattc_if(),
-                                                       this->parent_->get_remote_bda(), chr->handle);
+      auto status = esp_ble_gattc_register_for_notify(this->ble_client::BLEClientNode::parent_->get_gattc_if(),
+                                                       this->ble_client::BLEClientNode::parent_->get_remote_bda(), chr->handle);
       if (status) {
         ESP_LOGW(TAG, "esp_ble_gattc_register_for_notify failed, status=%d", status);
       } else {
@@ -197,7 +198,7 @@ void CulliganWaterSoftener::gattc_event_handler(esp_gattc_cb_event_t event, esp_
 
       // Find RX characteristic (write)
       auto rx_char_uuid = esp32_ble_tracker::ESPBTUUID::from_raw("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
-      chr = this->parent_->get_characteristic(service_uuid, rx_char_uuid);
+      chr = this->ble_client::BLEClientNode::parent_->get_characteristic(service_uuid, rx_char_uuid);
       if (chr != nullptr) {
         this->rx_handle_ = chr->handle;
         ESP_LOGI(TAG, "Found RX characteristic for write commands");
@@ -1045,8 +1046,8 @@ void CulliganWaterSoftener::write_command(const uint8_t *data, size_t length) {
   }
 
   esp_err_t status = esp_ble_gattc_write_char(
-    this->parent_->get_gattc_if(),
-    this->parent_->get_conn_id(),
+    this->ble_client::BLEClientNode::parent_->get_gattc_if(),
+    this->ble_client::BLEClientNode::parent_->get_conn_id(),
     this->rx_handle_,
     length,
     const_cast<uint8_t *>(data),
