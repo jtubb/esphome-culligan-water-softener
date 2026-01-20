@@ -71,7 +71,9 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_AUTO_DISCOVER, default=True): cv.boolean,
         cv.Optional(CONF_DEVICE_NAME, default=DEFAULT_DEVICE_NAME): cv.string,
     }
-).extend(cv.COMPONENT_SCHEMA).extend(ble_client.BLE_CLIENT_SCHEMA)
+).extend(cv.COMPONENT_SCHEMA).extend(ble_client.BLE_CLIENT_SCHEMA).extend(
+    esp32_ble_tracker.ESP_BLE_DEVICE_SCHEMA
+)
 
 
 async def to_code(config):
