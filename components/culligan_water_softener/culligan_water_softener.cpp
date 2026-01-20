@@ -43,12 +43,16 @@ void CulliganWaterSoftener::setup() {
   }
 }
 
+// Static flag to track if parse_device was ever called (used by loop() diagnostic)
+static bool g_parse_device_ever_called = false;
+
 bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &device) {
   // Track callback invocations to confirm listener is working
   static bool first_call = true;
   static uint32_t device_count = 0;
   static uint32_t named_device_count = 0;
   device_count++;
+  g_parse_device_ever_called = true;
 
   if (first_call) {
     first_call = false;
@@ -125,21 +129,23 @@ void CulliganWaterSoftener::loop() {
   if (this->auto_discover_ && !ble_listener_registered && !this->device_discovered_) {
     auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
     if (tracker != nullptr && now > 5000) {  // Wait 5 seconds for scanner to start
-      // Register ourselves as a listener
-      tracker->register_listener(this);
+      // Explicitly cast to ESPBTDeviceListener* to ensure correct pointer for multiple inheritance
+      esp32_ble_tracker::ESPBTDeviceListener *listener = static_cast<esp32_ble_tracker::ESPBTDeviceListener*>(this);
+      tracker->register_listener(listener);
       ble_listener_registered = true;
       registration_attempts++;
       ESP_LOGW(TAG, ">>> MANUALLY REGISTERED with BLE tracker (attempt %d) <<<", registration_attempts);
       ESP_LOGW(TAG, "  - Tracker pointer: %p", (void*)tracker);
       ESP_LOGW(TAG, "  - This pointer: %p", (void*)this);
+      ESP_LOGW(TAG, "  - Listener pointer (ESPBTDeviceListener*): %p", (void*)listener);
       ESP_LOGW(TAG, "  - Looking for device: '%s'", this->device_name_.c_str());
     }
   }
 
-  // Periodic diagnostic for auto-discovery (once at 15 seconds after boot)
-  static bool discovery_diagnostic_logged = false;
-  if (this->auto_discover_ && !this->device_discovered_ && !discovery_diagnostic_logged && now > 15000) {
-    discovery_diagnostic_logged = true;
+  // Periodic diagnostic for auto-discovery (every 30 seconds until found)
+  static uint32_t last_diagnostic_time = 0;
+  if (this->auto_discover_ && !this->device_discovered_ && (now - last_diagnostic_time > 30000)) {
+    last_diagnostic_time = now;
     auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
     ESP_LOGW(TAG, "Auto-discovery diagnostic at %d ms:", now);
     ESP_LOGW(TAG, "  - global_esp32_ble_tracker: %s", tracker != nullptr ? "available" : "NULL");
@@ -148,6 +154,17 @@ void CulliganWaterSoftener::loop() {
     ESP_LOGW(TAG, "  - Looking for device: '%s'", this->device_name_.c_str());
     if (tracker == nullptr) {
       ESP_LOGE(TAG, "  - BLE tracker not available! Auto-discovery will not work.");
+    }
+  }
+
+  // Check if parse_device was ever called (every 60 seconds)
+  static uint32_t last_callback_check = 0;
+  if (this->auto_discover_ && !this->device_discovered_ && (now - last_callback_check > 60000)) {
+    last_callback_check = now;
+    if (!g_parse_device_ever_called) {
+      ESP_LOGE(TAG, "WARNING: parse_device() has NEVER been called after %d seconds!", now / 1000);
+      ESP_LOGE(TAG, "  The BLE tracker may not be dispatching to listeners.");
+      ESP_LOGE(TAG, "  Check if esp32_ble_tracker is finding any devices.");
     }
   }
 
