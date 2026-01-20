@@ -23,6 +23,8 @@ from . import (
     RapidRinseTimeNumber,
     BrineRefillTimeNumber,
     LowSaltAlertNumber,
+    BrineTankTypeNumber,
+    BrineFillHeightNumber,
     UNIT_GPG,
     UNIT_HOURS,
     UNIT_LBS,
@@ -48,6 +50,8 @@ CONF_BRINE_DRAW_TIME = "brine_draw_time"
 CONF_RAPID_RINSE_TIME = "rapid_rinse_time"
 CONF_BRINE_REFILL_TIME = "brine_refill_time"
 CONF_LOW_SALT_ALERT = "low_salt_alert"
+CONF_BRINE_TANK_TYPE = "brine_tank_type"
+CONF_BRINE_FILL_HEIGHT = "brine_fill_height"
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -110,6 +114,16 @@ CONFIG_SCHEMA = cv.Schema(
             LowSaltAlertNumber,
             unit_of_measurement=UNIT_PERCENT,
             icon="mdi:alert",
+        ),
+        cv.Optional(CONF_BRINE_TANK_TYPE): number.number_schema(
+            BrineTankTypeNumber,
+            unit_of_measurement="in",
+            icon="mdi:diameter",
+        ),
+        cv.Optional(CONF_BRINE_FILL_HEIGHT): number.number_schema(
+            BrineFillHeightNumber,
+            unit_of_measurement="in",
+            icon="mdi:arrow-expand-vertical",
         ),
     }
 )
@@ -250,3 +264,25 @@ async def to_code(config):
         cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
         await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
         cg.add(parent.set_low_salt_alert_number(num))
+
+    if CONF_BRINE_TANK_TYPE in config:
+        num = await number.new_number(
+            config[CONF_BRINE_TANK_TYPE],
+            min_value=16,
+            max_value=30,
+            step=1,
+        )
+        cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
+        await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
+        cg.add(parent.set_brine_tank_type_number(num))
+
+    if CONF_BRINE_FILL_HEIGHT in config:
+        num = await number.new_number(
+            config[CONF_BRINE_FILL_HEIGHT],
+            min_value=1,
+            max_value=48,
+            step=1,
+        )
+        cg.add(num.traits.set_mode(NumberMode.NUMBER_MODE_BOX))
+        await cg.register_parented(num, config[CONF_CULLIGAN_WATER_SOFTENER_ID])
+        cg.add(parent.set_brine_fill_height_number(num))

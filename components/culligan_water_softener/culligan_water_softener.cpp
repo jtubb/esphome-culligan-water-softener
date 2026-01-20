@@ -503,6 +503,21 @@ void CulliganWaterSoftener::parse_status_packet() {
     this->brine_refill_time_ = refill_time;
     this->brine_tank_configured_ = (regens_remaining != 0xFF);
 
+    // Publish brine tank type and fill height sensors
+    if (this->brine_tank_type_sensor_ != nullptr) {
+      this->brine_tank_type_sensor_->publish_state(tank_type);
+    }
+    if (this->brine_fill_height_sensor_ != nullptr) {
+      this->brine_fill_height_sensor_->publish_state(fill_height);
+    }
+    // Update brine tank number entities with current values
+    if (this->brine_tank_type_number_ != nullptr) {
+      this->brine_tank_type_number_->publish_state(tank_type);
+    }
+    if (this->brine_fill_height_number_ != nullptr) {
+      this->brine_fill_height_number_->publish_state(fill_height);
+    }
+
     // Publish low salt alert threshold
     if (this->low_salt_alert_sensor_ != nullptr) {
       this->low_salt_alert_sensor_->publish_state(low_salt_alert);
@@ -1219,6 +1234,27 @@ void CulliganWaterSoftener::send_set_low_salt_alert(uint8_t threshold) {
   this->write_command(cmd, 20);
 }
 
+void CulliganWaterSoftener::send_set_brine_tank_config(uint8_t tank_type, uint8_t fill_height) {
+  ESP_LOGI(TAG, "Setting brine tank config: type=%d\", height=%d\"", tank_type, fill_height);
+  // Validate tank type (16, 18, 24, or 30 inch diameter)
+  if (tank_type != 16 && tank_type != 18 && tank_type != 24 && tank_type != 30) {
+    ESP_LOGW(TAG, "Invalid tank type %d, must be 16, 18, 24, or 30", tank_type);
+    return;
+  }
+  // Update local state
+  this->brine_tank_type_ = tank_type;
+  this->brine_fill_height_ = fill_height;
+  // Send command to device
+  uint8_t cmd[20];
+  memset(cmd, 0x75, 20);  // 'u' = Dashboard
+  cmd[13] = 'S';  // 0x53
+  cmd[14] = this->brine_regens_remaining_;
+  cmd[15] = 5;  // Low alert threshold (keep existing or default)
+  cmd[16] = tank_type;
+  cmd[17] = fill_height;
+  this->write_command(cmd, 20);
+}
+
 // ============================================================================
 // Helper Methods
 // ============================================================================
@@ -1425,6 +1461,23 @@ void BrineRefillTimeNumber::control(float value) {
 
 void LowSaltAlertNumber::control(float value) {
   this->parent_->send_set_low_salt_alert((uint8_t)value);
+  this->publish_state(value);
+}
+
+void BrineTankTypeNumber::control(float value) {
+  // Tank type must be 16, 18, 24, or 30
+  uint8_t tank_type = (uint8_t)value;
+  // Round to nearest valid value
+  if (tank_type < 17) tank_type = 16;
+  else if (tank_type < 21) tank_type = 18;
+  else if (tank_type < 27) tank_type = 24;
+  else tank_type = 30;
+  this->parent_->send_set_brine_tank_config(tank_type, this->parent_->get_brine_fill_height());
+  this->publish_state(tank_type);
+}
+
+void BrineFillHeightNumber::control(float value) {
+  this->parent_->send_set_brine_tank_config(this->parent_->get_brine_tank_type(), (uint8_t)value);
   this->publish_state(value);
 }
 

@@ -70,6 +70,8 @@ CONF_CYCLE_POSITION_5 = "cycle_position_5"
 CONF_CYCLE_POSITION_6 = "cycle_position_6"
 CONF_CYCLE_POSITION_7 = "cycle_position_7"
 CONF_CYCLE_POSITION_8 = "cycle_position_8"
+CONF_BRINE_TANK_TYPE = "brine_tank_type"
+CONF_BRINE_FILL_HEIGHT = "brine_fill_height"
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -271,6 +273,18 @@ CONFIG_SCHEMA = cv.Schema(
             state_class=STATE_CLASS_MEASUREMENT,
             icon=ICON_TIMER,
         ),
+        cv.Optional(CONF_BRINE_TANK_TYPE): sensor.sensor_schema(
+            unit_of_measurement="in",
+            accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
+            icon="mdi:diameter",
+        ),
+        cv.Optional(CONF_BRINE_FILL_HEIGHT): sensor.sensor_schema(
+            unit_of_measurement="in",
+            accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
+            icon="mdi:arrow-expand-vertical",
+        ),
     }
 )
 
@@ -408,3 +422,11 @@ async def to_code(config):
     if CONF_CYCLE_POSITION_8 in config:
         sens = await sensor.new_sensor(config[CONF_CYCLE_POSITION_8])
         cg.add(parent.set_cycle_position_8_sensor(sens))
+
+    if CONF_BRINE_TANK_TYPE in config:
+        sens = await sensor.new_sensor(config[CONF_BRINE_TANK_TYPE])
+        cg.add(parent.set_brine_tank_type_sensor(sens))
+
+    if CONF_BRINE_FILL_HEIGHT in config:
+        sens = await sensor.new_sensor(config[CONF_BRINE_FILL_HEIGHT])
+        cg.add(parent.set_brine_fill_height_sensor(sens))

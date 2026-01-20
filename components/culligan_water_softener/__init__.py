@@ -37,6 +37,8 @@ BrineDrawTimeNumber = culligan_ns.class_("BrineDrawTimeNumber", cg.Component)
 RapidRinseTimeNumber = culligan_ns.class_("RapidRinseTimeNumber", cg.Component)
 BrineRefillTimeNumber = culligan_ns.class_("BrineRefillTimeNumber", cg.Component)
 LowSaltAlertNumber = culligan_ns.class_("LowSaltAlertNumber", cg.Component)
+BrineTankTypeNumber = culligan_ns.class_("BrineTankTypeNumber", cg.Component)
+BrineFillHeightNumber = culligan_ns.class_("BrineFillHeightNumber", cg.Component)
 
 # Custom units
 UNIT_GPM = "GPM"

@@ -179,6 +179,12 @@ sensor:
     low_salt_alert:
       name: "${friendly_name} Low Salt Alert Threshold"
       id: low_salt_alert
+    brine_tank_type:
+      name: "${friendly_name} Brine Tank Diameter"
+      id: brine_tank_type
+    brine_fill_height:
+      name: "${friendly_name} Brine Fill Height"
+      id: brine_fill_height
     # Filter/air sensors
     filter_backwash_days:
       name: "${friendly_name} Filter Backwash Days"
@@ -337,3 +343,9 @@ number:
     low_salt_alert:
       name: "${friendly_name} Set Low Salt Alert"
       id: set_low_salt_alert
+    brine_tank_type:
+      name: "${friendly_name} Set Brine Tank Diameter"
+      id: set_brine_tank_type
+    brine_fill_height:
+      name: "${friendly_name} Set Brine Fill Height"
+      id: set_brine_fill_height

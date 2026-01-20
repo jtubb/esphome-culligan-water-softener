@@ -203,6 +203,16 @@ class LowSaltAlertNumber : public number::Number, public Parented<CulliganWaterS
   void control(float value) override;
 };
 
+class BrineTankTypeNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
+class BrineFillHeightNumber : public number::Number, public Parented<CulliganWaterSoftener> {
+ public:
+  void control(float value) override;
+};
+
 /**
  * Main component class for Culligan Water Softener
  */
@@ -255,6 +265,8 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   void set_cycle_position_6_sensor(sensor::Sensor *sensor) { cycle_position_6_sensor_ = sensor; }
   void set_cycle_position_7_sensor(sensor::Sensor *sensor) { cycle_position_7_sensor_ = sensor; }
   void set_cycle_position_8_sensor(sensor::Sensor *sensor) { cycle_position_8_sensor_ = sensor; }
+  void set_brine_tank_type_sensor(sensor::Sensor *sensor) { brine_tank_type_sensor_ = sensor; }
+  void set_brine_fill_height_sensor(sensor::Sensor *sensor) { brine_fill_height_sensor_ = sensor; }
 
   // Text sensor setters
   void set_firmware_version_sensor(text_sensor::TextSensor *sensor) { firmware_version_sensor_ = sensor; }
@@ -294,6 +306,8 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   void set_rapid_rinse_time_number(RapidRinseTimeNumber *num) { rapid_rinse_time_number_ = num; }
   void set_brine_refill_time_number(BrineRefillTimeNumber *num) { brine_refill_time_number_ = num; }
   void set_low_salt_alert_number(LowSaltAlertNumber *num) { low_salt_alert_number_ = num; }
+  void set_brine_tank_type_number(BrineTankTypeNumber *num) { brine_tank_type_number_ = num; }
+  void set_brine_fill_height_number(BrineFillHeightNumber *num) { brine_fill_height_number_ = num; }
 
   // Write command methods (for buttons/switches/numbers)
   void send_regen_now();
@@ -311,6 +325,11 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   void send_set_prefill(bool enable, uint8_t duration_hours);
   void send_set_cycle_time(uint8_t position, uint8_t minutes);
   void send_set_low_salt_alert(uint8_t threshold);
+  void send_set_brine_tank_config(uint8_t tank_type, uint8_t fill_height);
+
+  // Getters for number controls (allow Number classes to access current values)
+  uint8_t get_brine_tank_type() const { return brine_tank_type_; }
+  uint8_t get_brine_fill_height() const { return brine_fill_height_; }
 
   // Request data from device
   void request_data();
@@ -403,6 +422,8 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   sensor::Sensor *cycle_position_6_sensor_{nullptr};
   sensor::Sensor *cycle_position_7_sensor_{nullptr};
   sensor::Sensor *cycle_position_8_sensor_{nullptr};
+  sensor::Sensor *brine_tank_type_sensor_{nullptr};
+  sensor::Sensor *brine_fill_height_sensor_{nullptr};
 
   // Text sensors
   text_sensor::TextSensor *firmware_version_sensor_{nullptr};
@@ -442,6 +463,8 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   RapidRinseTimeNumber *rapid_rinse_time_number_{nullptr};
   BrineRefillTimeNumber *brine_refill_time_number_{nullptr};
   LowSaltAlertNumber *low_salt_alert_number_{nullptr};
+  BrineTankTypeNumber *brine_tank_type_number_{nullptr};
+  BrineFillHeightNumber *brine_fill_height_number_{nullptr};
 
   // Protocol parsing methods
   void handle_notification(const uint8_t *data, uint16_t length);
