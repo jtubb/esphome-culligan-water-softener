@@ -6,7 +6,7 @@ from esphome.const import (
     CONF_ID,
     UNIT_PERCENT,
     DEVICE_CLASS_BATTERY,
-    DEVICE_CLASS_VOLUME,
+    DEVICE_CLASS_WATER,
     STATE_CLASS_MEASUREMENT,
     STATE_CLASS_TOTAL_INCREASING,
 )
@@ -77,28 +77,28 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_CURRENT_FLOW): sensor.sensor_schema(
             unit_of_measurement=UNIT_GPM,
             accuracy_decimals=2,
-            device_class=DEVICE_CLASS_VOLUME,
+            device_class=DEVICE_CLASS_WATER,
             state_class=STATE_CLASS_MEASUREMENT,
             icon=ICON_WATER,
         ),
         cv.Optional(CONF_SOFT_WATER_REMAINING): sensor.sensor_schema(
             unit_of_measurement=UNIT_GALLON,
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_VOLUME,
+            device_class=DEVICE_CLASS_WATER,
             state_class=STATE_CLASS_MEASUREMENT,
             icon=ICON_WATER,
         ),
         cv.Optional(CONF_WATER_USAGE_TODAY): sensor.sensor_schema(
             unit_of_measurement=UNIT_GALLON,
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_VOLUME,
+            device_class=DEVICE_CLASS_WATER,
             state_class=STATE_CLASS_TOTAL_INCREASING,
             icon=ICON_WATER,
         ),
         cv.Optional(CONF_PEAK_FLOW_TODAY): sensor.sensor_schema(
             unit_of_measurement=UNIT_GPM,
             accuracy_decimals=2,
-            device_class=DEVICE_CLASS_VOLUME,
+            device_class=DEVICE_CLASS_WATER,
             state_class=STATE_CLASS_MEASUREMENT,
             icon=ICON_GAUGE,
         ),
@@ -116,7 +116,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_AVG_DAILY_USAGE): sensor.sensor_schema(
             unit_of_measurement=UNIT_GALLON,
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_VOLUME,
+            device_class=DEVICE_CLASS_WATER,
             state_class=STATE_CLASS_MEASUREMENT,
             icon=ICON_WATER,
         ),
@@ -129,7 +129,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_TOTAL_GALLONS): sensor.sensor_schema(
             unit_of_measurement=UNIT_GALLON,
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_VOLUME,
+            device_class=DEVICE_CLASS_WATER,
             state_class=STATE_CLASS_TOTAL_INCREASING,
             icon=ICON_WATER,
         ),
@@ -238,7 +238,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_TOTAL_GALLONS_RESETTABLE): sensor.sensor_schema(
             unit_of_measurement=UNIT_GALLON,
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_VOLUME,
+            device_class=DEVICE_CLASS_WATER,
             state_class=STATE_CLASS_TOTAL_INCREASING,
             icon=ICON_WATER,
         ),
