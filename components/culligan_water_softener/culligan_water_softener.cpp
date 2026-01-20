@@ -35,6 +35,16 @@ void CulliganWaterSoftener::setup() {
   ESP_LOGCONFIG(TAG, "Setting up Culligan Water Softener...");
   if (this->auto_discover_) {
     ESP_LOGI(TAG, "Auto-discovery enabled, scanning for device: %s", this->device_name_.c_str());
+
+    // Manually register with the global BLE tracker as a fallback
+    // in case the Python-side registration didn't work
+    auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
+    if (tracker != nullptr) {
+      tracker->register_listener(this);
+      ESP_LOGI(TAG, "Registered with BLE tracker for device scanning");
+    } else {
+      ESP_LOGW(TAG, "BLE tracker not available - auto-discovery won't work");
+    }
   }
 }
 
