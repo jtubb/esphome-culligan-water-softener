@@ -20,6 +20,8 @@
 #include "esphome/components/number/number.h"
 #include "esphome/core/log.h"
 
+#include <string>
+
 #include <vector>
 
 #ifdef USE_ESP32
@@ -215,8 +217,11 @@ class BrineFillHeightNumber : public number::Number, public Parented<CulliganWat
 
 /**
  * Main component class for Culligan Water Softener
+ * Inherits from ESPBTDeviceListener for auto-discovery of devices by name
  */
-class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public Component {
+class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode,
+                              public Component,
+                              public esp32_ble_tracker::ESPBTDeviceListener {
  public:
   void setup() override;
   void dump_config() override;
@@ -224,9 +229,14 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                           esp_ble_gattc_cb_param_t *param) override;
 
+  // ESPBTDeviceListener interface for auto-discovery
+  bool parse_device(const esp32_ble_tracker::ESPBTDevice &device) override;
+
   // Configuration setters
   void set_password(uint16_t password) { password_ = password; }
   void set_poll_interval(uint32_t interval_ms) { poll_interval_ms_ = interval_ms; }
+  void set_auto_discover(bool auto_discover) { auto_discover_ = auto_discover; }
+  void set_device_name(const std::string &name) { device_name_ = name; }
 
   // Sensor setters
   void set_current_flow_sensor(sensor::Sensor *sensor) { current_flow_sensor_ = sensor; }
@@ -384,6 +394,12 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   uint32_t last_poll_time_{0};
   uint32_t last_keepalive_time_{0};
   uint32_t keepalive_interval_ms_{4000};  // Send keepalive every 4 seconds
+
+  // Auto-discovery configuration
+  bool auto_discover_{true};
+  std::string device_name_{"CS_Meter_Soft"};
+  bool device_discovered_{false};
+  uint64_t discovered_address_{0};
 
   // Sensor pointers
   sensor::Sensor *current_flow_sensor_{nullptr};

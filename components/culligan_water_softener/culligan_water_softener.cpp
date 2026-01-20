@@ -33,6 +33,46 @@ static const size_t NUM_POLYNOMIALS = sizeof(ALLOWED_POLYNOMIALS) / sizeof(ALLOW
 
 void CulliganWaterSoftener::setup() {
   ESP_LOGCONFIG(TAG, "Setting up Culligan Water Softener...");
+  if (this->auto_discover_) {
+    ESP_LOGI(TAG, "Auto-discovery enabled, scanning for device: %s", this->device_name_.c_str());
+  }
+}
+
+bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &device) {
+  // Skip if auto-discovery is disabled or device already discovered
+  if (!this->auto_discover_ || this->device_discovered_) {
+    return false;
+  }
+
+  // Check if the device has the name we're looking for
+  std::string name = device.get_name();
+  if (name.empty()) {
+    return false;
+  }
+
+  if (name == this->device_name_) {
+    // Found the device!
+    this->device_discovered_ = true;
+    this->discovered_address_ = device.address_uint64();
+
+    // Format MAC address for logging
+    char mac_str[18];
+    const uint8_t *mac = device.address();
+    snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    ESP_LOGI(TAG, "Discovered %s at MAC: %s (RSSI: %d dB)",
+             name.c_str(), mac_str, device.get_rssi());
+
+    // Update the BLE client's address to connect to this device
+    this->parent_->set_address(this->discovered_address_);
+
+    ESP_LOGI(TAG, "BLE client address updated, will connect automatically");
+
+    return true;  // We handled this device
+  }
+
+  return false;  // Not our device
 }
 
 void CulliganWaterSoftener::loop() {
@@ -90,6 +130,11 @@ void CulliganWaterSoftener::dump_config() {
   ESP_LOGCONFIG(TAG, "Culligan Water Softener:");
   ESP_LOGCONFIG(TAG, "  Password: %d", this->password_);
   ESP_LOGCONFIG(TAG, "  Poll Interval: %d ms", this->poll_interval_ms_);
+  ESP_LOGCONFIG(TAG, "  Auto-discover: %s", this->auto_discover_ ? "true" : "false");
+  ESP_LOGCONFIG(TAG, "  Device Name: %s", this->device_name_.c_str());
+  if (this->device_discovered_) {
+    ESP_LOGCONFIG(TAG, "  Discovered Address: 0x%012llX", this->discovered_address_);
+  }
   LOG_SENSOR("  ", "Current Flow", this->current_flow_sensor_);
   LOG_SENSOR("  ", "Soft Water Remaining", this->soft_water_remaining_sensor_);
   LOG_SENSOR("  ", "Water Usage Today", this->water_usage_today_sensor_);

@@ -1,17 +1,21 @@
 """ESPHome component for Culligan Water Softener BLE integration."""
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import ble_client
+from esphome.components import ble_client, esp32_ble_tracker
 from esphome.const import CONF_ID
 
-DEPENDENCIES = ["ble_client"]
+DEPENDENCIES = ["ble_client", "esp32_ble_tracker"]
+AUTO_LOAD = ["esp32_ble_tracker"]
 CODEOWNERS = ["@your-github-username"]
 MULTI_CONF = True
 
 # Component namespace
 culligan_ns = cg.esphome_ns.namespace("culligan_water_softener")
 CulliganWaterSoftener = culligan_ns.class_(
-    "CulliganWaterSoftener", cg.Component, ble_client.BLEClientNode
+    "CulliganWaterSoftener",
+    cg.Component,
+    ble_client.BLEClientNode,
+    esp32_ble_tracker.ESPBTDeviceListener,
 )
 
 # Button classes
@@ -52,6 +56,11 @@ UNIT_GRAINS = "grains"
 # Configuration keys
 CONF_PASSWORD = "password"
 CONF_POLL_INTERVAL = "poll_interval"
+CONF_AUTO_DISCOVER = "auto_discover"
+CONF_DEVICE_NAME = "device_name"
+
+# Default device name for Culligan water softeners
+DEFAULT_DEVICE_NAME = "CS_Meter_Soft"
 
 # Configuration schema
 CONFIG_SCHEMA = cv.Schema(
@@ -59,6 +68,8 @@ CONFIG_SCHEMA = cv.Schema(
         cv.GenerateID(): cv.declare_id(CulliganWaterSoftener),
         cv.Optional(CONF_PASSWORD, default=1234): cv.int_range(min=0, max=9999),
         cv.Optional(CONF_POLL_INTERVAL, default="60s"): cv.positive_time_period_milliseconds,
+        cv.Optional(CONF_AUTO_DISCOVER, default=True): cv.boolean,
+        cv.Optional(CONF_DEVICE_NAME, default=DEFAULT_DEVICE_NAME): cv.string,
     }
 ).extend(cv.COMPONENT_SCHEMA).extend(ble_client.BLE_CLIENT_SCHEMA)
 
@@ -69,6 +80,9 @@ async def to_code(config):
     await cg.register_component(var, config)
     await ble_client.register_ble_node(var, config)
 
+    # Register as BLE device listener for auto-discovery
+    await esp32_ble_tracker.register_ble_device(var, config)
+
     # Set password
     if CONF_PASSWORD in config:
         cg.add(var.set_password(config[CONF_PASSWORD]))
@@ -76,3 +90,7 @@ async def to_code(config):
     # Set poll interval
     if CONF_POLL_INTERVAL in config:
         cg.add(var.set_poll_interval(config[CONF_POLL_INTERVAL]))
+
+    # Set auto-discovery options
+    cg.add(var.set_auto_discover(config[CONF_AUTO_DISCOVER]))
+    cg.add(var.set_device_name(config[CONF_DEVICE_NAME]))

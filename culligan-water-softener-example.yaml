@@ -2,12 +2,17 @@
 # Uses custom component for Culligan CS Meter Soft water softeners
 #
 # Device: ESP32-S3 DevKitC-1
+#
+# AUTO-DISCOVERY: Set water_softener_mac to "00:00:00:00:00:00" to enable
+# automatic discovery of the water softener by its Bluetooth name "CS_Meter_Soft".
+# The component will scan for the device and connect automatically.
 
 substitutions:
   device_name: watersoftener-ble
   friendly_name: "Water Softener"
   # Water Softener MAC Address
-  water_softener_mac: "E8:3B:AA:91:CD:68"
+  # Set to "00:00:00:00:00:00" for auto-discovery, or enter your device's MAC
+  water_softener_mac: "00:00:00:00:00:00"
 
 esphome:
   name: ${device_name}
@@ -112,6 +117,9 @@ culligan_water_softener:
   ble_client_id: culligan_ble_client
   password: 1234  # Default password
   poll_interval: 60s
+  # Auto-discovery: scans for device by name if MAC is 00:00:00:00:00:00
+  auto_discover: true
+  device_name: "CS_Meter_Soft"  # Bluetooth name to search for
 
 # Sensors
 sensor:
