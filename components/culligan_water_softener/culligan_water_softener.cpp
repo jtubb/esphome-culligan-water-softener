@@ -39,6 +39,13 @@ void CulliganWaterSoftener::setup() {
 }
 
 bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &device) {
+  // Log first call to confirm listener is registered
+  static bool first_call = true;
+  if (first_call) {
+    first_call = false;
+    ESP_LOGI(TAG, "BLE scanner active - parse_device called for first time");
+  }
+
   // Skip if auto-discovery is disabled or device already discovered
   if (!this->auto_discover_) {
     return false;
@@ -51,9 +58,9 @@ bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &d
   // Check if the device has the name we're looking for
   std::string name = device.get_name();
 
-  // Log devices with names to help debug discovery
+  // Log devices with names to help debug discovery (use INFO level to ensure visibility)
   if (!name.empty()) {
-    ESP_LOGD(TAG, "BLE device found: '%s' (looking for '%s')", name.c_str(), this->device_name_.c_str());
+    ESP_LOGI(TAG, "BLE scan found device: '%s' (looking for '%s')", name.c_str(), this->device_name_.c_str());
   }
 
   if (name.empty()) {
