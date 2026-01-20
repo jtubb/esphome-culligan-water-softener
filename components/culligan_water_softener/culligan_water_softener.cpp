@@ -1254,11 +1254,30 @@ float CulliganWaterSoftener::calculate_salt_remaining() {
     return 0.0f;
   }
 
+  // Calculate max tank capacity based on dimensions
+  // Volume = π × r² × height, then multiply by salt density (~75 lbs/ft³)
+  // Or use the pre-calculated multiplier: capacity = fill_height × tank_multiplier
+  float tank_multiplier = this->get_tank_multiplier(this->brine_tank_type_);
+  float max_capacity = this->brine_fill_height_ * tank_multiplier;
+
   // Salt per regen (residential) = refillTime × 1.5 lbs
   float salt_per_regen = this->brine_refill_time_ * 1.5f;
 
   // Salt remaining = saltPerRegen × regensRemaining
-  return salt_per_regen * this->brine_regens_remaining_;
+  float salt_remaining = salt_per_regen * this->brine_regens_remaining_;
+
+  // Sanity check: salt level can't exceed tank capacity
+  // If it does, we likely have corrupt data - return last valid value
+  if (salt_remaining > max_capacity * 1.1f) {  // Allow 10% tolerance
+    ESP_LOGW(TAG, "Ignoring corrupt salt level: %.1f lbs (max capacity: %.1f lbs, regens=%d)",
+             salt_remaining, max_capacity, this->brine_regens_remaining_);
+    return this->last_valid_salt_level_;
+  }
+
+  // Store last valid value for use when corrupt data is detected
+  this->last_valid_salt_level_ = salt_remaining;
+
+  return salt_remaining;
 }
 
 std::string CulliganWaterSoftener::format_time_12h(uint8_t hour, uint8_t minute, uint8_t am_pm) {

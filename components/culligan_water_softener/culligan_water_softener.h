@@ -348,6 +348,7 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode, public 
   uint8_t brine_refill_time_{0};
   uint8_t brine_regens_remaining_{0xFF};
   bool brine_tank_configured_{false};
+  float last_valid_salt_level_{0.0f};
 
   // Current flag states
   uint8_t current_flags_{0};
