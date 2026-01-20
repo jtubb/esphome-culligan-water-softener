@@ -38,24 +38,21 @@ void CulliganWaterSoftener::setup() {
            this->device_name_.c_str());
 
   if (this->auto_discover_) {
-    ESP_LOGI(TAG, "Auto-discovery enabled, will register with BLE tracker in loop()");
+    ESP_LOGI(TAG, "Auto-discovery enabled for device name: '%s'", this->device_name_.c_str());
+    ESP_LOGI(TAG, "BLE listener registered via Python codegen - waiting for scan results");
   }
 }
 
 bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &device) {
-  // Log first call to confirm listener is registered
+  // Track callback invocations to confirm listener is working
   static bool first_call = true;
   static uint32_t device_count = 0;
+  static uint32_t named_device_count = 0;
   device_count++;
 
   if (first_call) {
     first_call = false;
-    ESP_LOGI(TAG, "BLE scanner active - parse_device called for first time");
-  }
-
-  // Log every 10th device to show scanning is working (even devices without names)
-  if (device_count % 10 == 0) {
-    ESP_LOGD(TAG, "BLE scan progress: %d devices seen so far", device_count);
+    ESP_LOGW(TAG, ">>> BLE SCANNER CALLBACK ACTIVE - parse_device called for first time! <<<");
   }
 
   // Skip if auto-discovery is disabled or device already discovered
@@ -70,9 +67,16 @@ bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &d
   // Check if the device has the name we're looking for
   std::string name = device.get_name();
 
-  // Log devices with names to help debug discovery (use INFO level to ensure visibility)
+  // Log devices with names at WARN level to ensure visibility
   if (!name.empty()) {
-    ESP_LOGI(TAG, "BLE scan found named device: '%s' (looking for '%s')", name.c_str(), this->device_name_.c_str());
+    named_device_count++;
+    ESP_LOGW(TAG, "BLE device #%d with name: '%s' (looking for '%s')",
+             named_device_count, name.c_str(), this->device_name_.c_str());
+  }
+
+  // Log scan progress every 50 devices at INFO level
+  if (device_count % 50 == 0) {
+    ESP_LOGI(TAG, "BLE scan: %d total devices seen, %d with names", device_count, named_device_count);
   }
 
   if (name.empty()) {
@@ -90,7 +94,7 @@ bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &d
     snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    ESP_LOGI(TAG, "Discovered %s at MAC: %s (RSSI: %d dB)",
+    ESP_LOGW(TAG, ">>> DISCOVERED TARGET DEVICE: %s at MAC: %s (RSSI: %d dB) <<<",
              name.c_str(), mac_str, device.get_rssi());
 
     // Update the BLE client's address to connect to this device
@@ -114,14 +118,17 @@ bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &d
 void CulliganWaterSoftener::loop() {
   uint32_t now = millis();
 
-  // Deferred BLE tracker registration (tracker not available in setup())
-  static bool ble_listener_registered = false;
-  if (this->auto_discover_ && !ble_listener_registered) {
+  // Periodic diagnostic for auto-discovery (once at 10 seconds after boot)
+  static bool discovery_diagnostic_logged = false;
+  if (this->auto_discover_ && !this->device_discovered_ && !discovery_diagnostic_logged && now > 10000) {
+    discovery_diagnostic_logged = true;
     auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
-    if (tracker != nullptr) {
-      tracker->register_listener(this);
-      ble_listener_registered = true;
-      ESP_LOGI(TAG, "Registered with BLE tracker for auto-discovery of '%s'", this->device_name_.c_str());
+    ESP_LOGW(TAG, "Auto-discovery diagnostic at %d ms:", now);
+    ESP_LOGW(TAG, "  - global_esp32_ble_tracker: %s", tracker != nullptr ? "available" : "NULL");
+    ESP_LOGW(TAG, "  - device_discovered_: %s", this->device_discovered_ ? "true" : "false");
+    ESP_LOGW(TAG, "  - Looking for device: '%s'", this->device_name_.c_str());
+    if (tracker == nullptr) {
+      ESP_LOGE(TAG, "  - BLE tracker not available! Auto-discovery will not work.");
     }
   }
 
