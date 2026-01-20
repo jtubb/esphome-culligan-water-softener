@@ -38,20 +38,7 @@ void CulliganWaterSoftener::setup() {
            this->device_name_.c_str());
 
   if (this->auto_discover_) {
-    ESP_LOGI(TAG, "Auto-discovery enabled, scanning for device: %s", this->device_name_.c_str());
-
-    // Manually register with the global BLE tracker as a fallback
-    // in case the Python-side registration didn't work
-    auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
-    ESP_LOGI(TAG, "global_esp32_ble_tracker pointer: %p", (void*)tracker);
-    if (tracker != nullptr) {
-      tracker->register_listener(this);
-      ESP_LOGI(TAG, "Registered with BLE tracker for device scanning");
-    } else {
-      ESP_LOGW(TAG, "BLE tracker not available - auto-discovery won't work");
-    }
-  } else {
-    ESP_LOGI(TAG, "Auto-discovery disabled");
+    ESP_LOGI(TAG, "Auto-discovery enabled, will register with BLE tracker in loop()");
   }
 }
 
@@ -118,6 +105,17 @@ bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &d
 
 void CulliganWaterSoftener::loop() {
   uint32_t now = millis();
+
+  // Deferred BLE tracker registration (tracker not available in setup())
+  static bool ble_listener_registered = false;
+  if (this->auto_discover_ && !ble_listener_registered) {
+    auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
+    if (tracker != nullptr) {
+      tracker->register_listener(this);
+      ble_listener_registered = true;
+      ESP_LOGI(TAG, "Registered with BLE tracker for auto-discovery of '%s'", this->device_name_.c_str());
+    }
+  }
 
   // Send keepalive to maintain connection (every 4 seconds)
   if (this->authenticated_ && (now - this->last_keepalive_time_ >= this->keepalive_interval_ms_)) {
