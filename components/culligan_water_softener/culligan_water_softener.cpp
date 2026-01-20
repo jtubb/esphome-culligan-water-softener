@@ -66,9 +66,15 @@ bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &d
 
     // Update the BLE client's address to connect to this device
     // Use explicit BLEClientNode::parent_ to disambiguate from ESPBTDeviceListener::parent_
-    this->ble_client::BLEClientNode::parent_->set_address(this->discovered_address_);
+    auto *ble_client = this->ble_client::BLEClientNode::parent_;
+    ble_client->set_address(this->discovered_address_);
 
-    ESP_LOGI(TAG, "BLE client address updated, will connect automatically");
+    // Trigger connection by re-enabling the client
+    // This is needed because the client may have given up connecting to 00:00:00:00:00:00
+    ble_client->set_enabled(false);
+    ble_client->set_enabled(true);
+
+    ESP_LOGI(TAG, "BLE client address updated to %s, initiating connection", mac_str);
 
     return true;  // We handled this device
   }
