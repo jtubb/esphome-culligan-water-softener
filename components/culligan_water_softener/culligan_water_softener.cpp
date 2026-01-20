@@ -32,19 +32,26 @@ static const uint8_t ALLOWED_POLYNOMIALS[] = {
 static const size_t NUM_POLYNOMIALS = sizeof(ALLOWED_POLYNOMIALS) / sizeof(ALLOWED_POLYNOMIALS[0]);
 
 void CulliganWaterSoftener::setup() {
-  ESP_LOGCONFIG(TAG, "Setting up Culligan Water Softener...");
+  ESP_LOGI(TAG, "=== Culligan Water Softener setup() called ===");
+  ESP_LOGI(TAG, "auto_discover_=%s, device_name_=%s",
+           this->auto_discover_ ? "true" : "false",
+           this->device_name_.c_str());
+
   if (this->auto_discover_) {
     ESP_LOGI(TAG, "Auto-discovery enabled, scanning for device: %s", this->device_name_.c_str());
 
     // Manually register with the global BLE tracker as a fallback
     // in case the Python-side registration didn't work
     auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
+    ESP_LOGI(TAG, "global_esp32_ble_tracker pointer: %p", (void*)tracker);
     if (tracker != nullptr) {
       tracker->register_listener(this);
       ESP_LOGI(TAG, "Registered with BLE tracker for device scanning");
     } else {
       ESP_LOGW(TAG, "BLE tracker not available - auto-discovery won't work");
     }
+  } else {
+    ESP_LOGI(TAG, "Auto-discovery disabled");
   }
 }
 
