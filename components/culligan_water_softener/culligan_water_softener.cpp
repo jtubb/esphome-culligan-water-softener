@@ -118,13 +118,32 @@ bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &d
 void CulliganWaterSoftener::loop() {
   uint32_t now = millis();
 
-  // Periodic diagnostic for auto-discovery (once at 10 seconds after boot)
+  // Manual BLE tracker registration (Python codegen registration doesn't seem to work)
+  // Wait until scanner is running before registering
+  static bool ble_listener_registered = false;
+  static uint8_t registration_attempts = 0;
+  if (this->auto_discover_ && !ble_listener_registered && !this->device_discovered_) {
+    auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
+    if (tracker != nullptr && now > 5000) {  // Wait 5 seconds for scanner to start
+      // Register ourselves as a listener
+      tracker->register_listener(this);
+      ble_listener_registered = true;
+      registration_attempts++;
+      ESP_LOGW(TAG, ">>> MANUALLY REGISTERED with BLE tracker (attempt %d) <<<", registration_attempts);
+      ESP_LOGW(TAG, "  - Tracker pointer: %p", (void*)tracker);
+      ESP_LOGW(TAG, "  - This pointer: %p", (void*)this);
+      ESP_LOGW(TAG, "  - Looking for device: '%s'", this->device_name_.c_str());
+    }
+  }
+
+  // Periodic diagnostic for auto-discovery (once at 15 seconds after boot)
   static bool discovery_diagnostic_logged = false;
-  if (this->auto_discover_ && !this->device_discovered_ && !discovery_diagnostic_logged && now > 10000) {
+  if (this->auto_discover_ && !this->device_discovered_ && !discovery_diagnostic_logged && now > 15000) {
     discovery_diagnostic_logged = true;
     auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
     ESP_LOGW(TAG, "Auto-discovery diagnostic at %d ms:", now);
     ESP_LOGW(TAG, "  - global_esp32_ble_tracker: %s", tracker != nullptr ? "available" : "NULL");
+    ESP_LOGW(TAG, "  - ble_listener_registered: %s", ble_listener_registered ? "true" : "false");
     ESP_LOGW(TAG, "  - device_discovered_: %s", this->device_discovered_ ? "true" : "false");
     ESP_LOGW(TAG, "  - Looking for device: '%s'", this->device_name_.c_str());
     if (tracker == nullptr) {
