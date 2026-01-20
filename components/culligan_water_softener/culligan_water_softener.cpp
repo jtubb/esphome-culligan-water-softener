@@ -53,13 +53,18 @@ bool CulliganWaterSoftener::parse_device(const esp32_ble_tracker::ESPBTDevice &d
   this->device_discovered_ = true;
   this->discovered_address_ = device.address_uint64();
 
-  // Format MAC address for logging
+  // Format MAC address for logging and sensor
   char mac_str[18];
   const uint8_t *mac = device.address();
   snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
   ESP_LOGI(TAG, "Discovered %s at %s (RSSI: %d dB)", name.c_str(), mac_str, device.get_rssi());
+
+  // Publish MAC address to text sensor
+  if (this->mac_address_sensor_ != nullptr) {
+    this->mac_address_sensor_->publish_state(mac_str);
+  }
 
   // Update the BLE client's address to connect to this device
   // Use explicit BLEClientNode::parent_ to disambiguate from ESPBTDeviceListener::parent_
@@ -161,6 +166,15 @@ void CulliganWaterSoftener::gattc_event_handler(esp_gattc_cb_event_t event, esp_
         ESP_LOGI(TAG, "Connected to water softener");
         this->authenticated_ = false;
         this->handshake_received_ = false;
+
+        // Publish MAC address if not already published by auto-discovery
+        if (this->mac_address_sensor_ != nullptr && !this->device_discovered_) {
+          const uint8_t *mac = this->ble_client::BLEClientNode::parent_->get_remote_bda();
+          char mac_str[18];
+          snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+          this->mac_address_sensor_->publish_state(mac_str);
+        }
       }
       break;
 
@@ -1307,15 +1321,30 @@ void CulliganWaterSoftener::send_set_brine_tank_config(uint8_t tank_type, uint8_
 // are now inline in the header file for better performance
 
 float CulliganWaterSoftener::get_battery_percent(uint8_t raw) {
-  // Battery lookup table per PROTOCOL.md
-  switch (raw) {
-    case 0: return 0.0f;
-    case 1: return 100.0f;
-    case 2: return 75.0f;
-    case 3: return 50.0f;
-    case 4: return 25.0f;
-    default: return 0.0f;
+  // Battery calculation from APK's getBatteryCapacity formula
+  // Convert raw ADC value to voltage: raw * 4 * 0.002 * 11
+  float voltage = raw * 4.0f * 0.002f * 11.0f;
+
+  float battery_pct;
+  if (voltage >= 9.5f) {
+    battery_pct = 100.0f;
+  } else if (voltage >= 8.91f) {
+    battery_pct = 100.0f - ((9.5f - voltage) * 8.78f);
+  } else if (voltage >= 8.48f) {
+    battery_pct = 94.78f - ((8.91f - voltage) * 30.26f);
+  } else if (voltage >= 7.43f) {
+    battery_pct = 81.84f - ((8.48f - voltage) * 60.47f);
+  } else if (voltage >= 6.5f) {
+    battery_pct = 18.68f - ((7.43f - voltage) * 20.02f);
+  } else {
+    battery_pct = 0.0f;
   }
+
+  // Clamp to 0-100 range
+  if (battery_pct < 0.0f) battery_pct = 0.0f;
+  if (battery_pct > 100.0f) battery_pct = 100.0f;
+
+  return battery_pct;
 }
 
 float CulliganWaterSoftener::get_tank_multiplier(uint8_t tank_type) {

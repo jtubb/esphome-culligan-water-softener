@@ -6,6 +6,7 @@ This component enables direct BLE communication between your ESP32 and Culligan 
 
 ## Features
 
+- **Auto-Discovery** - Automatically finds your water softener by Bluetooth name
 - **Native BLE** - Direct ESP32 to water softener communication
 - **Authentication** - CRC8-based auth for firmware < 6.0
 - **30+ Sensors** - Real-time flow, usage, battery, cycle times, and statistics
@@ -57,6 +58,7 @@ This component enables direct BLE communication between your ESP32 and Culligan 
 | `firmware_version` | e.g., "C4.64" |
 | `device_time` | Current device clock |
 | `regeneration_time` | Scheduled regen time |
+| `mac_address` | Device MAC address (useful with auto-discovery) |
 
 ### Binary Sensors
 | Sensor | Description |
@@ -148,7 +150,9 @@ external_components:
 
 ## Configuration
 
-### Minimal Example
+### Minimal Example (with Auto-Discovery)
+
+The easiest way to get started - the component automatically finds your water softener by its Bluetooth name:
 
 ```yaml
 esphome:
@@ -162,6 +166,70 @@ wifi:
 
 api:
 logger:
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: true
+  on_ble_advertise:
+    # Required for auto-discovery callbacks
+    - then: []
+
+ble_client:
+  - mac_address: "00:00:00:00:00:00"  # Placeholder for auto-discovery
+    id: culligan_ble_client
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/jtubb/esphome-culligan-water-softener
+      ref: main
+    components: [ culligan_water_softener ]
+
+culligan_water_softener:
+  id: water_softener
+  ble_client_id: culligan_ble_client
+  auto_discover: true              # Enable auto-discovery
+  device_name: "CS_Meter_Soft"     # Bluetooth name to search for
+  password: 1234
+  poll_interval: 60s
+
+sensor:
+  - platform: culligan_water_softener
+    culligan_water_softener_id: water_softener
+    current_flow:
+      name: "Water Softener Flow"
+    soft_water_remaining:
+      name: "Soft Water Remaining"
+    battery_level:
+      name: "Water Softener Battery"
+
+text_sensor:
+  - platform: culligan_water_softener
+    culligan_water_softener_id: water_softener
+    firmware_version:
+      name: "Firmware Version"
+    mac_address:
+      name: "Water Softener MAC Address"  # Shows discovered MAC
+```
+
+### Minimal Example (with Known MAC Address)
+
+If you already know your device's MAC address:
+
+```yaml
+esphome:
+  name: water-softener
+  platform: ESP32
+  board: esp32dev
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+logger:
+
+esp32_ble_tracker:
 
 ble_client:
   - mac_address: "E8:3B:AA:91:CD:68"  # Your device MAC
@@ -177,7 +245,8 @@ external_components:
 culligan_water_softener:
   id: water_softener
   ble_client_id: culligan_ble_client
-  password: 1234  # Default, change if needed
+  auto_discover: false             # Disable auto-discovery
+  password: 1234
   poll_interval: 60s
 
 sensor:
@@ -203,6 +272,9 @@ See [culligan-water-softener-example.yaml](culligan-water-softener-example.yaml)
 
 ## Finding Your MAC Address
 
+**With Auto-Discovery (Recommended)**: No need to find the MAC address manually! Enable `auto_discover: true` and the component will automatically find your water softener by its Bluetooth name "CS_Meter_Soft". The discovered MAC address is exposed as a text sensor.
+
+**Without Auto-Discovery**: If you prefer to specify the MAC address manually:
 1. Install **nRF Connect** on your phone
 2. Scan for devices - look for **"CS_Meter_Soft"**
 3. Note the MAC address (e.g., `E8:3B:AA:91:CD:68`)
@@ -213,11 +285,30 @@ See [culligan-water-softener-example.yaml](culligan-water-softener-example.yaml)
 culligan_water_softener:
   id: water_softener
   ble_client_id: culligan_ble_client
-  password: 1234          # Device password (default: 1234)
-  poll_interval: 60s      # Data refresh interval (default: 60s)
+  password: 1234              # Device password (default: 1234)
+  poll_interval: 60s          # Data refresh interval (default: 60s)
+  auto_discover: true         # Auto-find device by name (default: true)
+  device_name: "CS_Meter_Soft"  # Bluetooth name to search for (default: CS_Meter_Soft)
 ```
 
+| Option | Default | Description |
+|--------|---------|-------------|
+| `password` | 1234 | Device password for authentication |
+| `poll_interval` | 60s | How often to request data from device |
+| `auto_discover` | true | Automatically find device by Bluetooth name |
+| `device_name` | CS_Meter_Soft | Bluetooth name to search for (only used with auto_discover) |
+
 ## Troubleshooting
+
+### Auto-Discovery Not Finding Device
+
+If auto-discovery doesn't find your water softener:
+1. **CRITICAL**: Add the `on_ble_advertise` trigger to `esp32_ble_tracker` (see examples above) - this is required to enable device listener callbacks
+2. Ensure the water softener is powered on and in range (< 30 feet)
+3. Check that `esp32_ble_tracker` is configured with `active: true` scanning
+4. Verify the device name matches - default is "CS_Meter_Soft"
+5. Check logs for `Discovered CS_Meter_Soft at XX:XX:XX:XX:XX:XX`
+6. Try power-cycling the water softener
 
 ### No Data After Connection
 

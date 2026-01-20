@@ -14,6 +14,7 @@ CONF_CULLIGAN_WATER_SOFTENER_ID = "culligan_water_softener_id"
 CONF_FIRMWARE_VERSION = "firmware_version"
 CONF_DEVICE_TIME = "device_time"
 CONF_REGEN_TIME = "regeneration_time"
+CONF_MAC_ADDRESS = "mac_address"
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -26,6 +27,9 @@ CONFIG_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_REGEN_TIME): text_sensor.text_sensor_schema(
             icon="mdi:clock",
+        ),
+        cv.Optional(CONF_MAC_ADDRESS): text_sensor.text_sensor_schema(
+            icon="mdi:bluetooth",
         ),
     }
 )
@@ -46,3 +50,7 @@ async def to_code(config):
     if CONF_REGEN_TIME in config:
         sens = await text_sensor.new_text_sensor(config[CONF_REGEN_TIME])
         cg.add(parent.set_regen_time_sensor(sens))
+
+    if CONF_MAC_ADDRESS in config:
+        sens = await text_sensor.new_text_sensor(config[CONF_MAC_ADDRESS])
+        cg.add(parent.set_mac_address_sensor(sens))

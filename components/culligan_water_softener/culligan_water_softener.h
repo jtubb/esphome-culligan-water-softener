@@ -282,6 +282,7 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode,
   void set_firmware_version_sensor(text_sensor::TextSensor *sensor) { firmware_version_sensor_ = sensor; }
   void set_device_time_sensor(text_sensor::TextSensor *sensor) { device_time_sensor_ = sensor; }
   void set_regen_time_sensor(text_sensor::TextSensor *sensor) { regen_time_sensor_ = sensor; }
+  void set_mac_address_sensor(text_sensor::TextSensor *sensor) { mac_address_sensor_ = sensor; }
 
   // Binary sensor setters
   void set_display_off_sensor(binary_sensor::BinarySensor *sensor) { display_off_sensor_ = sensor; }
@@ -445,6 +446,7 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode,
   text_sensor::TextSensor *firmware_version_sensor_{nullptr};
   text_sensor::TextSensor *device_time_sensor_{nullptr};
   text_sensor::TextSensor *regen_time_sensor_{nullptr};
+  text_sensor::TextSensor *mac_address_sensor_{nullptr};
 
   // Binary sensors
   binary_sensor::BinarySensor *display_off_sensor_{nullptr};

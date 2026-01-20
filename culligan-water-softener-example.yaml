@@ -91,6 +91,9 @@ esp32_ble_tracker:
     interval: 1100ms
     window: 110ms
     active: true
+  on_ble_advertise:
+    # This trigger is required to enable auto-discovery callbacks
+    - then: []
 
 # BLE Client for Water Softener
 ble_client:
@@ -127,112 +130,112 @@ sensor:
     culligan_water_softener_id: water_softener
     # Real-time sensors
     current_flow:
-      name: "${friendly_name} Current Flow"
+      name: "Current Flow"
       id: current_flow
     soft_water_remaining:
-      name: "${friendly_name} Soft Water Remaining"
+      name: "Soft Water Remaining"
       id: soft_water_remaining
     water_usage_today:
-      name: "${friendly_name} Water Usage Today"
+      name: "Water Usage Today"
       id: water_usage_today
     peak_flow_today:
-      name: "${friendly_name} Peak Flow Today"
+      name: "Peak Flow Today"
       id: peak_flow_today
     water_hardness:
-      name: "${friendly_name} Water Hardness"
+      name: "Water Hardness"
       id: water_hardness
     brine_level:
-      name: "${friendly_name} Salt Level"
+      name: "Salt Level"
       id: brine_level
     avg_daily_usage:
-      name: "${friendly_name} Average Daily Usage"
+      name: "Average Daily Usage"
       id: avg_daily_usage
     days_until_regen:
-      name: "${friendly_name} Days Until Regeneration"
+      name: "Days Until Regeneration"
       id: days_until_regen
     battery_level:
-      name: "${friendly_name} Battery"
+      name: "Battery"
       id: battery_level
     # Lifetime totals
     total_gallons:
-      name: "${friendly_name} Total Gallons Treated"
+      name: "Total Gallons Treated"
       id: total_gallons
     total_regenerations:
-      name: "${friendly_name} Total Regenerations"
+      name: "Total Regenerations"
       id: total_regenerations
     # Resettable counters
     total_gallons_resettable:
-      name: "${friendly_name} Total Gallons (Resettable)"
+      name: "Total Gallons (Resettable)"
       id: total_gallons_resettable
     total_regenerations_resettable:
-      name: "${friendly_name} Total Regens (Resettable)"
+      name: "Total Regens (Resettable)"
       id: total_regens_resettable
     # Settings sensors
     reserve_capacity:
-      name: "${friendly_name} Reserve Capacity"
+      name: "Reserve Capacity"
       id: reserve_capacity
     resin_capacity:
-      name: "${friendly_name} Resin Capacity"
+      name: "Resin Capacity"
       id: resin_capacity
     regen_day_override:
-      name: "${friendly_name} Regen Day Override"
+      name: "Regen Day Override"
       id: regen_day_override
     # Brine tank sensors
     brine_tank_capacity:
-      name: "${friendly_name} Brine Tank Capacity"
+      name: "Brine Tank Capacity"
       id: brine_tank_capacity
     brine_salt_percent:
-      name: "${friendly_name} Salt Level Percent"
+      name: "Salt Level Percent"
       id: brine_salt_percent
     low_salt_alert:
-      name: "${friendly_name} Low Salt Alert Threshold"
+      name: "Low Salt Alert Threshold"
       id: low_salt_alert
     brine_tank_type:
-      name: "${friendly_name} Brine Tank Diameter"
+      name: "Brine Tank Diameter"
       id: brine_tank_type
     brine_fill_height:
-      name: "${friendly_name} Brine Fill Height"
+      name: "Brine Fill Height"
       id: brine_fill_height
     # Filter/air sensors
     filter_backwash_days:
-      name: "${friendly_name} Filter Backwash Days"
+      name: "Filter Backwash Days"
       id: filter_backwash_days
     air_recharge_days:
-      name: "${friendly_name} Air Recharge Days"
+      name: "Air Recharge Days"
       id: air_recharge_days
     air_recharge_frequency:
-      name: "${friendly_name} Air Recharge Frequency"
+      name: "Air Recharge Frequency"
       id: air_recharge_frequency
     # Cycle time sensors (positions 1-4)
     backwash_time:
-      name: "${friendly_name} Backwash Time"
+      name: "Backwash Time"
       id: backwash_time
     brine_draw_time:
-      name: "${friendly_name} Brine Draw Time"
+      name: "Brine Draw Time"
       id: brine_draw_time
     rapid_rinse_time:
-      name: "${friendly_name} Rapid Rinse Time"
+      name: "Rapid Rinse Time"
       id: rapid_rinse_time
     brine_refill_time:
-      name: "${friendly_name} Brine Refill Time"
+      name: "Brine Refill Time"
       id: brine_refill_time
     # Cycle positions 5-8
     cycle_position_5:
-      name: "${friendly_name} Cycle Position 5"
+      name: "Cycle Position 5"
       id: cycle_pos_5
     cycle_position_6:
-      name: "${friendly_name} Cycle Position 6"
+      name: "Cycle Position 6"
       id: cycle_pos_6
     cycle_position_7:
-      name: "${friendly_name} Cycle Position 7"
+      name: "Cycle Position 7"
       id: cycle_pos_7
     cycle_position_8:
-      name: "${friendly_name} Cycle Position 8"
+      name: "Cycle Position 8"
       id: cycle_pos_8
 
   # WiFi signal sensor
   - platform: wifi_signal
-    name: "${friendly_name} WiFi Signal"
+    name: "WiFi Signal"
     update_interval: 60s
 
 # Text sensors
@@ -240,42 +243,45 @@ text_sensor:
   - platform: culligan_water_softener
     culligan_water_softener_id: water_softener
     firmware_version:
-      name: "${friendly_name} Firmware Version"
+      name: "Firmware Version"
       id: firmware_version
     device_time:
-      name: "${friendly_name} Device Time"
+      name: "Device Time"
       id: device_time
     regeneration_time:
-      name: "${friendly_name} Regeneration Time"
+      name: "Regeneration Time"
       id: regen_time
+    mac_address:
+      name: "MAC Address"
+      id: mac_address
 
 # Binary sensors (status flags)
 binary_sensor:
   - platform: culligan_water_softener
     culligan_water_softener_id: water_softener
     display_off:
-      name: "${friendly_name} Display Off"
+      name: "Display Off"
       id: display_off
     bypass_active:
-      name: "${friendly_name} Bypass Active"
+      name: "Bypass Active"
       id: bypass_active
     shutoff_active:
-      name: "${friendly_name} Shutoff Active"
+      name: "Shutoff Active"
       id: shutoff_active
     regeneration_active:
-      name: "${friendly_name} Regenerating"
+      name: "Regenerating"
       id: regen_active
     rental_regen_disabled:
-      name: "${friendly_name} Rental Regen Disabled"
+      name: "Rental Regen Disabled"
       id: rental_regen_disabled
     rental_unit:
-      name: "${friendly_name} Rental Unit"
+      name: "Rental Unit"
       id: rental_unit
     prefill_enabled:
-      name: "${friendly_name} Pre-fill Enabled"
+      name: "Pre-fill Enabled"
       id: prefill_enabled
     prefill_soak_mode:
-      name: "${friendly_name} Pre-fill Soak Mode"
+      name: "Pre-fill Soak Mode"
       id: prefill_soak_mode
 
 # Buttons (commands)
@@ -283,31 +289,31 @@ button:
   - platform: culligan_water_softener
     culligan_water_softener_id: water_softener
     regenerate_now:
-      name: "${friendly_name} Regenerate Now"
+      name: "Regenerate Now"
       id: regen_now_btn
     regenerate_next:
-      name: "${friendly_name} Regenerate Next Scheduled"
+      name: "Regenerate Next Scheduled"
       id: regen_next_btn
     sync_time:
-      name: "${friendly_name} Sync Time"
+      name: "Sync Time"
       id: sync_time_btn
     reset_gallons:
-      name: "${friendly_name} Reset Gallons Counter"
+      name: "Reset Gallons Counter"
       id: reset_gallons_btn
     reset_regenerations:
-      name: "${friendly_name} Reset Regenerations Counter"
+      name: "Reset Regenerations Counter"
       id: reset_regens_btn
 
   # Restart button
   - platform: restart
-    name: "${friendly_name} Restart"
+    name: "Restart"
 
 # Switches (toggles)
 switch:
   - platform: culligan_water_softener
     culligan_water_softener_id: water_softener
     display:
-      name: "${friendly_name} Display"
+      name: "Display"
       id: display_switch
 
 # Numbers (adjustable settings)
@@ -316,44 +322,44 @@ number:
   - platform: culligan_water_softener
     culligan_water_softener_id: water_softener
     water_hardness:
-      name: "${friendly_name} Set Water Hardness"
+      name: "Set Water Hardness"
       id: set_hardness
     regeneration_time_hour:
-      name: "${friendly_name} Set Regen Hour"
+      name: "Set Regen Hour"
       id: set_regen_hour
     reserve_capacity:
-      name: "${friendly_name} Set Reserve Capacity"
+      name: "Set Reserve Capacity"
       id: set_reserve
     salt_level:
-      name: "${friendly_name} Set Salt Level"
+      name: "Set Salt Level"
       id: set_salt_level
     regen_days:
-      name: "${friendly_name} Set Regen Days"
+      name: "Set Regen Days"
       id: set_regen_days
     resin_capacity:
-      name: "${friendly_name} Set Resin Capacity"
+      name: "Set Resin Capacity"
       id: set_resin_capacity
     prefill_duration:
-      name: "${friendly_name} Set Prefill Duration"
+      name: "Set Prefill Duration"
       id: set_prefill_duration
     backwash_time:
-      name: "${friendly_name} Set Backwash Time"
+      name: "Set Backwash Time"
       id: set_backwash_time
     brine_draw_time:
-      name: "${friendly_name} Set Brine Draw Time"
+      name: "Set Brine Draw Time"
       id: set_brine_draw_time
     rapid_rinse_time:
-      name: "${friendly_name} Set Rapid Rinse Time"
+      name: "Set Rapid Rinse Time"
       id: set_rapid_rinse_time
     brine_refill_time:
-      name: "${friendly_name} Set Brine Refill Time"
+      name: "Set Brine Refill Time"
       id: set_brine_refill_time
     low_salt_alert:
-      name: "${friendly_name} Set Low Salt Alert"
+      name: "Set Low Salt Alert"
       id: set_low_salt_alert
     brine_tank_type:
-      name: "${friendly_name} Set Brine Tank Diameter"
+      name: "Set Brine Tank Diameter"
       id: set_brine_tank_type
     brine_fill_height:
-      name: "${friendly_name} Set Brine Fill Height"
+      name: "Set Brine Fill Height"
       id: set_brine_fill_height
