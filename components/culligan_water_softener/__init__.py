@@ -4,8 +4,9 @@ import esphome.config_validation as cv
 from esphome.components import ble_client, esp32_ble_tracker
 from esphome.const import CONF_ID
 
+CONF_ESP32_BLE_ID = "esp32_ble_id"
+
 DEPENDENCIES = ["ble_client", "esp32_ble_tracker"]
-AUTO_LOAD = ["esp32_ble_tracker"]
 CODEOWNERS = ["@your-github-username"]
 MULTI_CONF = True
 
@@ -66,14 +67,13 @@ DEFAULT_DEVICE_NAME = "CS_Meter_Soft"
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(CulliganWaterSoftener),
+        cv.GenerateID(CONF_ESP32_BLE_ID): cv.use_id(esp32_ble_tracker.ESP32BLETracker),
         cv.Optional(CONF_PASSWORD, default=1234): cv.int_range(min=0, max=9999),
         cv.Optional(CONF_POLL_INTERVAL, default="60s"): cv.positive_time_period_milliseconds,
         cv.Optional(CONF_AUTO_DISCOVER, default=True): cv.boolean,
         cv.Optional(CONF_DEVICE_NAME, default=DEFAULT_DEVICE_NAME): cv.string,
     }
-).extend(cv.COMPONENT_SCHEMA).extend(ble_client.BLE_CLIENT_SCHEMA).extend(
-    esp32_ble_tracker.ESP_BLE_DEVICE_SCHEMA
-)
+).extend(cv.COMPONENT_SCHEMA).extend(ble_client.BLE_CLIENT_SCHEMA)
 
 
 async def to_code(config):
@@ -83,7 +83,8 @@ async def to_code(config):
     await ble_client.register_ble_node(var, config)
 
     # Register as BLE device listener for auto-discovery
-    await esp32_ble_tracker.register_ble_device(var, config)
+    ble_tracker = await cg.get_variable(config[CONF_ESP32_BLE_ID])
+    cg.add(ble_tracker.register_listener(var))
 
     # Set password
     if CONF_PASSWORD in config:
