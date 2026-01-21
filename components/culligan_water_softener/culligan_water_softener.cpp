@@ -450,12 +450,6 @@ void CulliganWaterSoftener::parse_status_packet() {
     uint8_t am_pm = this->buffer_peek(5);
     uint8_t battery_raw = this->buffer_peek(6);
 
-    // Debug: log raw bytes to find correct battery offset
-    ESP_LOGW(TAG, "uu-0 bytes[3-10]: %02X %02X %02X %02X %02X %02X %02X %02X",
-             this->buffer_peek(3), this->buffer_peek(4), this->buffer_peek(5),
-             this->buffer_peek(6), this->buffer_peek(7), this->buffer_peek(8),
-             this->buffer_peek(9), this->buffer_peek(10));
-
     // Flow values use BIG-ENDIAN and ÷100 scaling
     uint16_t flow_raw = this->read_uint16_be(7);
     float current_flow = flow_raw / 100.0f;
