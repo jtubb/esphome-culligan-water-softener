@@ -1327,16 +1327,30 @@ void CulliganWaterSoftener::send_set_brine_tank_config(uint8_t tank_type, uint8_
 // are now inline in the header file for better performance
 
 float CulliganWaterSoftener::get_battery_percent(uint8_t raw) {
-  // Battery lookup table per PROTOCOL.md (from APK getBatteryCapacity)
-  // Raw value is a discrete state indicator, not an ADC value
-  switch (raw) {
-    case 0: return 0.0f;
-    case 1: return 100.0f;
-    case 2: return 75.0f;
-    case 3: return 50.0f;
-    case 4: return 25.0f;
-    default: return 0.0f;  // 5+ = 0%
+  // Battery calculation from APK's getBatteryCapacity formula
+  // Raw value is ADC reading, convert to voltage: raw * 4 * 0.002 * 11
+  float voltage = raw * 4.0f * 0.002f * 11.0f;
+
+  float battery_pct;
+  if (voltage >= 9.5f) {
+    battery_pct = 100.0f;
+  } else if (voltage >= 8.91f) {
+    battery_pct = 100.0f - ((9.5f - voltage) * 8.78f);
+  } else if (voltage >= 8.48f) {
+    battery_pct = 94.78f - ((8.91f - voltage) * 30.26f);
+  } else if (voltage >= 7.43f) {
+    battery_pct = 81.84f - ((8.48f - voltage) * 60.47f);
+  } else if (voltage >= 6.5f) {
+    battery_pct = 18.68f - ((7.43f - voltage) * 20.02f);
+  } else {
+    battery_pct = 0.0f;
   }
+
+  // Clamp to 0-100 range
+  if (battery_pct < 0.0f) battery_pct = 0.0f;
+  if (battery_pct > 100.0f) battery_pct = 100.0f;
+
+  return battery_pct;
 }
 
 float CulliganWaterSoftener::get_tank_multiplier(uint8_t tank_type) {
