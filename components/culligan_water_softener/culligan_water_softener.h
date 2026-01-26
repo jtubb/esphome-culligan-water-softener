@@ -380,6 +380,15 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode,
   bool brine_tank_configured_{false};
   float last_valid_salt_level_{0.0f};
 
+  // Last valid values for sensor validation (prevent errant readings)
+  uint16_t last_valid_water_usage_today_{0};
+  uint16_t last_valid_soft_water_remaining_{0};
+  float last_valid_current_flow_{0.0f};
+  float last_valid_peak_flow_{0.0f};
+  uint32_t last_valid_total_gallons_{0};
+  float last_valid_avg_daily_usage_{0.0f};
+  bool has_valid_readings_{false};  // True after first valid data
+
   // Current flag states
   uint8_t current_flags_{0};
   bool regen_active_{false};
@@ -571,6 +580,14 @@ class CulliganWaterSoftener : public esphome::ble_client::BLEClientNode,
   // Daily usage history parsing
   void parse_daily_usage_data(const uint8_t *data, size_t len, size_t start_index);
   void calculate_avg_daily_usage();
+
+  // Sensor value validation (prevents errant readings from corrupt packets)
+  uint16_t validate_water_usage_today(uint16_t raw_value);
+  uint16_t validate_soft_water_remaining(uint16_t raw_value);
+  float validate_current_flow(float raw_value);
+  float validate_peak_flow(float raw_value);
+  uint32_t validate_total_gallons(uint32_t raw_value);
+  float validate_avg_daily_usage(float raw_value);
 };
 
 }  // namespace culligan_water_softener

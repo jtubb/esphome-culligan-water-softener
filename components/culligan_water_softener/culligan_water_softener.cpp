@@ -445,6 +445,16 @@ void CulliganWaterSoftener::parse_status_packet() {
     // Offset 18: Flags
     // Offset 19: End marker '9' (0x39)
 
+    // Validate end marker - reject packet if corrupt
+    uint8_t end_marker = this->buffer_peek(19);
+    if (end_marker != END_MARKER_UU_0) {
+      ESP_LOGW(TAG, "Invalid uu-0 end marker: 0x%02X (expected 0x%02X), rejecting packet",
+               end_marker, END_MARKER_UU_0);
+      this->buffer_consume(20);
+      this->buffer_clear();  // Clear buffer to resync
+      return;
+    }
+
     uint8_t hour = this->buffer_peek(3);
     uint8_t minute = this->buffer_peek(4);
     uint8_t am_pm = this->buffer_peek(5);
@@ -452,18 +462,27 @@ void CulliganWaterSoftener::parse_status_packet() {
 
     // Flow values use BIG-ENDIAN and ÷100 scaling
     uint16_t flow_raw = this->read_uint16_be(7);
-    float current_flow = flow_raw / 100.0f;
+    float current_flow_raw = flow_raw / 100.0f;
 
-    uint16_t soft_water = this->read_uint16_be(9);
-    uint16_t usage_today = this->read_uint16_be(11);
+    uint16_t soft_water_raw = this->read_uint16_be(9);
+    uint16_t usage_today_raw = this->read_uint16_be(11);
 
     uint16_t peak_flow_raw = this->read_uint16_be(13);
-    float peak_flow = peak_flow_raw / 100.0f;
+    float peak_flow_value = peak_flow_raw / 100.0f;
 
     uint8_t hardness = this->buffer_peek(15);
     uint8_t regen_hour = this->buffer_peek(16);
     uint8_t regen_am_pm = this->buffer_peek(17);
     uint8_t flags = this->buffer_peek(18);
+
+    // Validate sensor values before publishing
+    float current_flow = this->validate_current_flow(current_flow_raw);
+    uint16_t soft_water = this->validate_soft_water_remaining(soft_water_raw);
+    uint16_t usage_today = this->validate_water_usage_today(usage_today_raw);
+    float peak_flow = this->validate_peak_flow(peak_flow_value);
+
+    // Mark that we have valid readings (for jump detection)
+    this->has_valid_readings_ = true;
 
     // Get battery percentage using lookup table
     float battery_pct = this->get_battery_percent(battery_raw);
@@ -471,7 +490,7 @@ void CulliganWaterSoftener::parse_status_packet() {
     // Parse flags and update binary sensors
     this->parse_flags(flags);
 
-    // Publish sensor values
+    // Publish sensor values (using validated values)
     if (this->device_time_sensor_ != nullptr) {
       this->device_time_sensor_->publish_state(this->format_time_12h(hour, minute, am_pm));
     }
@@ -530,6 +549,16 @@ void CulliganWaterSoftener::parse_status_packet() {
     // Offset 16: Fill height (inches)
     // Offset 17: Brine refill time (minutes)
     // Offset 19: End marker ':' (0x3A)
+
+    // Validate end marker
+    uint8_t end_marker = this->buffer_peek(19);
+    if (end_marker != END_MARKER_UU_1) {
+      ESP_LOGW(TAG, "Invalid uu-1 end marker: 0x%02X (expected 0x%02X), rejecting packet",
+               end_marker, END_MARKER_UU_1);
+      this->buffer_consume(20);
+      this->buffer_clear();
+      return;
+    }
 
     uint8_t filter_backwash_days = this->buffer_peek(3);
     uint8_t air_recharge_days = this->buffer_peek(4);
@@ -861,12 +890,24 @@ void CulliganWaterSoftener::parse_statistics_packet() {
     // Offset 15: Regen active flag
     // Offset 18: End marker 'F' (0x46)
 
-    // Current flow
-    uint16_t flow_raw = this->read_uint16_be(3);
-    float current_flow = flow_raw / 100.0f;
+    // Validate end marker
+    uint8_t end_marker = this->buffer_peek(18);
+    if (end_marker != END_MARKER_WW_0) {
+      ESP_LOGW(TAG, "Invalid ww-0 end marker: 0x%02X (expected 0x%02X), rejecting packet",
+               end_marker, END_MARKER_WW_0);
+      this->buffer_consume(19);
+      this->buffer_clear();
+      return;
+    }
 
-    // Total gallons treated (24-bit big-endian)
-    uint32_t total_gallons = this->read_uint24_be(5);
+    // Current flow (validate)
+    uint16_t flow_raw = this->read_uint16_be(3);
+    float current_flow_raw = flow_raw / 100.0f;
+    float current_flow = this->validate_current_flow(current_flow_raw);
+
+    // Total gallons treated (24-bit big-endian, validate)
+    uint32_t total_gallons_raw = this->read_uint24_be(5);
+    uint32_t total_gallons = this->validate_total_gallons(total_gallons_raw);
 
     // Total gallons resettable (24-bit big-endian)
     uint32_t total_gallons_resettable = this->read_uint24_be(8);
@@ -948,22 +989,29 @@ void CulliganWaterSoftener::calculate_avg_daily_usage() {
   int count = 0;
 
   for (int i = 31; i < 62; i++) {
-    if (this->daily_usage_data_[i] > 0) {
-      sum += this->daily_usage_data_[i];
+    // Validate individual daily values (each byte × 10, max = 255 × 10 = 2550)
+    float daily_value = this->daily_usage_data_[i];
+    if (daily_value > 0 && daily_value <= 2550) {
+      sum += daily_value;
       count++;
+    } else if (daily_value > 2550) {
+      ESP_LOGW(TAG, "Ignoring errant daily usage at index %d: %.0f", i, daily_value);
     }
   }
 
-  float avg = 0.0f;
+  float avg_raw = 0.0f;
   if (count > 0) {
-    avg = sum / count;
+    avg_raw = sum / count;
   }
+
+  // Validate the calculated average
+  float avg = this->validate_avg_daily_usage(avg_raw);
 
   if (this->avg_daily_usage_sensor_ != nullptr) {
     this->avg_daily_usage_sensor_->publish_state(avg);
   }
 
-  ESP_LOGI(TAG, "Calculated avg daily usage: %.0f gal (from %d non-zero days)", avg, count);
+  ESP_LOGI(TAG, "Calculated avg daily usage: %.0f gal (from %d valid days)", avg, count);
 }
 
 // ============================================================================
@@ -1399,6 +1447,139 @@ std::string CulliganWaterSoftener::format_time_24h(uint8_t hour, uint8_t minute)
   char time_str[6];
   snprintf(time_str, sizeof(time_str), "%02d:%02d", hour, minute);
   return std::string(time_str);
+}
+
+// ============================================================================
+// Sensor Value Validation
+// ============================================================================
+
+// Maximum reasonable values for validation
+static constexpr uint16_t MAX_WATER_USAGE_TODAY = 5000;      // 5000 gallons/day is extreme
+static constexpr uint16_t MAX_SOFT_WATER_REMAINING = 15000; // 15000 gallon capacity is very large
+static constexpr float MAX_CURRENT_FLOW = 30.0f;            // 30 GPM is high for residential
+static constexpr float MAX_PEAK_FLOW = 30.0f;               // 30 GPM max
+static constexpr uint32_t MAX_TOTAL_GALLONS = 50000000;     // 50 million lifetime gallons
+static constexpr float MAX_AVG_DAILY_USAGE = 2000.0f;       // 2000 gallons/day average
+
+// Maximum change thresholds (detect sudden jumps from corrupt data)
+static constexpr uint16_t MAX_USAGE_JUMP = 500;             // 500 gallon jump is suspicious
+static constexpr uint16_t MAX_SOFT_WATER_JUMP = 2000;       // Capacity shouldn't jump much
+static constexpr float MAX_FLOW_JUMP = 15.0f;               // 15 GPM instant change is suspicious
+
+uint16_t CulliganWaterSoftener::validate_water_usage_today(uint16_t raw_value) {
+  // Check absolute maximum
+  if (raw_value > MAX_WATER_USAGE_TODAY) {
+    ESP_LOGW(TAG, "Rejecting errant water_usage_today: %d (max: %d), using last valid: %d",
+             raw_value, MAX_WATER_USAGE_TODAY, this->last_valid_water_usage_today_);
+    return this->last_valid_water_usage_today_;
+  }
+
+  // Check for suspicious jumps (only if we have previous valid data)
+  if (this->has_valid_readings_ && raw_value > this->last_valid_water_usage_today_) {
+    uint16_t jump = raw_value - this->last_valid_water_usage_today_;
+    if (jump > MAX_USAGE_JUMP) {
+      ESP_LOGW(TAG, "Rejecting suspicious water_usage_today jump: %d -> %d (delta: %d)",
+               this->last_valid_water_usage_today_, raw_value, jump);
+      return this->last_valid_water_usage_today_;
+    }
+  }
+
+  this->last_valid_water_usage_today_ = raw_value;
+  return raw_value;
+}
+
+uint16_t CulliganWaterSoftener::validate_soft_water_remaining(uint16_t raw_value) {
+  if (raw_value > MAX_SOFT_WATER_REMAINING) {
+    ESP_LOGW(TAG, "Rejecting errant soft_water_remaining: %d (max: %d), using last valid: %d",
+             raw_value, MAX_SOFT_WATER_REMAINING, this->last_valid_soft_water_remaining_);
+    return this->last_valid_soft_water_remaining_;
+  }
+
+  if (this->has_valid_readings_ && raw_value > this->last_valid_soft_water_remaining_) {
+    uint16_t jump = raw_value - this->last_valid_soft_water_remaining_;
+    if (jump > MAX_SOFT_WATER_JUMP) {
+      ESP_LOGW(TAG, "Rejecting suspicious soft_water_remaining jump: %d -> %d (delta: %d)",
+               this->last_valid_soft_water_remaining_, raw_value, jump);
+      return this->last_valid_soft_water_remaining_;
+    }
+  }
+
+  this->last_valid_soft_water_remaining_ = raw_value;
+  return raw_value;
+}
+
+float CulliganWaterSoftener::validate_current_flow(float raw_value) {
+  if (raw_value > MAX_CURRENT_FLOW || raw_value < 0.0f) {
+    ESP_LOGW(TAG, "Rejecting errant current_flow: %.2f, using last valid: %.2f",
+             raw_value, this->last_valid_current_flow_);
+    return this->last_valid_current_flow_;
+  }
+
+  if (this->has_valid_readings_) {
+    float jump = raw_value - this->last_valid_current_flow_;
+    if (jump > MAX_FLOW_JUMP || jump < -MAX_FLOW_JUMP) {
+      ESP_LOGW(TAG, "Rejecting suspicious current_flow jump: %.2f -> %.2f (delta: %.2f)",
+               this->last_valid_current_flow_, raw_value, jump);
+      return this->last_valid_current_flow_;
+    }
+  }
+
+  this->last_valid_current_flow_ = raw_value;
+  return raw_value;
+}
+
+float CulliganWaterSoftener::validate_peak_flow(float raw_value) {
+  if (raw_value > MAX_PEAK_FLOW || raw_value < 0.0f) {
+    ESP_LOGW(TAG, "Rejecting errant peak_flow: %.2f, using last valid: %.2f",
+             raw_value, this->last_valid_peak_flow_);
+    return this->last_valid_peak_flow_;
+  }
+
+  // Peak flow should only increase or reset to 0 (new day)
+  if (this->has_valid_readings_ && raw_value > this->last_valid_peak_flow_) {
+    float jump = raw_value - this->last_valid_peak_flow_;
+    if (jump > MAX_FLOW_JUMP && this->last_valid_peak_flow_ > 0.0f) {
+      ESP_LOGW(TAG, "Rejecting suspicious peak_flow jump: %.2f -> %.2f (delta: %.2f)",
+               this->last_valid_peak_flow_, raw_value, jump);
+      return this->last_valid_peak_flow_;
+    }
+  }
+
+  this->last_valid_peak_flow_ = raw_value;
+  return raw_value;
+}
+
+uint32_t CulliganWaterSoftener::validate_total_gallons(uint32_t raw_value) {
+  if (raw_value > MAX_TOTAL_GALLONS) {
+    ESP_LOGW(TAG, "Rejecting errant total_gallons: %lu (max: %lu), using last valid: %lu",
+             (unsigned long)raw_value, (unsigned long)MAX_TOTAL_GALLONS,
+             (unsigned long)this->last_valid_total_gallons_);
+    return this->last_valid_total_gallons_;
+  }
+
+  // Total gallons should only increase (monotonic counter)
+  if (this->has_valid_readings_ && raw_value < this->last_valid_total_gallons_) {
+    uint32_t decrease = this->last_valid_total_gallons_ - raw_value;
+    if (decrease > 1000) {  // Allow small decreases for legitimate resets
+      ESP_LOGW(TAG, "Rejecting suspicious total_gallons decrease: %lu -> %lu",
+               (unsigned long)this->last_valid_total_gallons_, (unsigned long)raw_value);
+      return this->last_valid_total_gallons_;
+    }
+  }
+
+  this->last_valid_total_gallons_ = raw_value;
+  return raw_value;
+}
+
+float CulliganWaterSoftener::validate_avg_daily_usage(float raw_value) {
+  if (raw_value > MAX_AVG_DAILY_USAGE || raw_value < 0.0f) {
+    ESP_LOGW(TAG, "Rejecting errant avg_daily_usage: %.0f, using last valid: %.0f",
+             raw_value, this->last_valid_avg_daily_usage_);
+    return this->last_valid_avg_daily_usage_;
+  }
+
+  this->last_valid_avg_daily_usage_ = raw_value;
+  return raw_value;
 }
 
 void CulliganWaterSoftener::parse_flags(uint8_t flags) {
